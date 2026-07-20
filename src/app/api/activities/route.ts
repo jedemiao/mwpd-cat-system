@@ -1,0 +1,69 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/auditLog";
+import { z } from "zod";
+
+const createSchema = z.object({
+  date: z.string(), // ISO date string from the client
+  activityName: z.string(),
+  remarks: z.string().optional(),
+  officeOrderUrl: z.string().optional(),
+  memoUrl: z.string().optional(),
+  inspectionReportUrl: z.string().optional(),
+  assigneeIds: z.array(z.string()).min(1),
+});
+
+// GET /api/activities — list activities for the logged-in user's office, newest first
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const activities = await prisma.activity.findMany({
+    where: { officeId: session.user.officeId },
+    orderBy: { date: "desc" },
+    include: { assignees: { include: { user: { select: { name: true } } } } },
+  });
+
+  return NextResponse.json(activities);
+}
+
+// POST /api/activities — create an activity with one or more people in charge
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { date, assigneeIds, ...rest } = parsed.data;
+
+  const activity = await prisma.activity.create({
+    data: {
+      ...rest,
+      officeId: session.user.officeId,
+      date: new Date(date),
+      assignees: { create: assigneeIds.map((userId) => ({ userId })) },
+    },
+    include: { assignees: { include: { user: { select: { name: true } } } } },
+  });
+
+  await logAudit({
+    officeId: session.user.officeId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "Activity",
+    entityId: activity.id,
+    details: parsed.data,
+  });
+
+  return NextResponse.json(activity, { status: 201 });
+}

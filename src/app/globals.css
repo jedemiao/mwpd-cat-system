@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  /* Form controls */
+  .field-label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-white/40;
+  }
+
+  .field-input {
+    @apply w-full rounded-md border border-ink-400/30 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-white/15 dark:bg-ink-800 dark:text-white dark:placeholder:text-white/25;
+  }
+
+  .field-checkbox {
+    @apply h-4 w-4 rounded border-ink-400/40 text-primary focus:ring-2 focus:ring-primary/20 dark:border-white/25 dark:bg-ink-800;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary-600;
+  }
+
+  .btn-secondary {
+    @apply btn border border-ink-400/30 bg-white text-ink-700 hover:bg-surface dark:border-white/15 dark:bg-ink-800 dark:text-white/80 dark:hover:bg-ink-700;
+  }
+
+  .btn-danger-outline {
+    @apply btn border border-danger/40 text-danger hover:bg-danger-50 dark:hover:bg-danger/10;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  /* Surfaces */
+  .card {
+    @apply rounded-lg border border-ink-400/15 bg-white shadow-card dark:border-white/10 dark:bg-ink-800;
+  }
+
+  .card-header {
+    @apply flex items-center justify-between border-b border-ink-400/10 px-5 py-4 dark:border-white/10;
+  }
+
+  .card-title {
+    @apply text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-white/40;
+  }
+
+  /* Tables */
+  .data-table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .data-table thead th {
+    @apply border-b border-ink-400/15 bg-surface px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/40;
+  }
+
+  .data-table tbody td {
+    @apply border-b border-ink-400/10 px-4 py-3 text-ink-800 dark:border-white/10 dark:text-white/80;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors hover:bg-primary-50/40 dark:hover:bg-white/[0.04];
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-success-50 text-success-600 dark:bg-success/15 dark:text-success;
+  }
+
+  .badge-danger {
+    @apply badge bg-danger-50 text-danger-600 dark:bg-danger/15 dark:text-danger;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning-50 text-[#92660c] dark:bg-warning/15 dark:text-warning;
+  }
+
+  .badge-secondary {
+    @apply badge bg-secondary-50 text-secondary-600 dark:bg-secondary/15 dark:text-secondary-50/80;
+  }
+
+  .badge-info {
+    @apply badge bg-info-50 text-info-600 dark:bg-info/15 dark:text-info;
+  }
+}

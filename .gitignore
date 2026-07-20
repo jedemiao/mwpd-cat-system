@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# env files (real secrets — .env.example is the tracked template)
+.env
+.env.local
+.env*.local
+
+# TLS key material for the reverse proxy
+certs/*.pem
+certs/*.key
+certs/*.crt
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# vercel
+.vercel

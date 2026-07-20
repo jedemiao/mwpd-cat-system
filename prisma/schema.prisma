@@ -1,0 +1,169 @@
+// MWPD Communication & Activity Tracker — database schema
+// Every core table carries officeId so the same schema supports
+// one division today and many offices sharing one instance later.
+// Pair officeId with Postgres Row-Level Security policies in production
+// (see README) so office A can never query office B's rows.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN            // full system access, manages offices/users
+  DIVISION_CHIEF   // approves, signs off, sees all division data
+  RECORDS_STAFF    // ADAS III / intake & filing (Incoming/Outgoing entry)
+  STAFF            // field staff, logs activities, requests leave
+}
+
+enum DocComplexity {
+  SIMPLE           // ARTA: 3 working days
+  COMPLEX          // ARTA: 7 working days
+  HIGHLY_TECHNICAL // ARTA: 20 working days
+}
+
+enum LeaveType {
+  CTO
+  VACATION
+  SICK
+  EMERGENCY
+  OTHER
+}
+
+model Office {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique // short code, e.g. "MWPTD-CARAGA"
+  createdAt DateTime @default(now())
+
+  users      User[]
+  incoming   IncomingDocument[]
+  outgoing   OutgoingDocument[]
+  activities Activity[]
+  leaves     Leave[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  officeId     String
+  office       Office   @relation(fields: [officeId], references: [id])
+  name         String
+  username     String   @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  createdAt    DateTime @default(now())
+
+  routedIncoming     IncomingDocument[] @relation("RoutedTo")
+  activityAssignment ActivityAssignee[]
+  leaves             Leave[]
+  auditLogs          AuditLog[]
+}
+
+model IncomingDocument {
+  id               String        @id @default(cuid())
+  officeId         String
+  office           Office        @relation(fields: [officeId], references: [id])
+
+  dateReceived     DateTime
+  routingNumber    String        @unique // e.g. 070126-L-008
+  documentTitle    String
+  routedToId       String?
+  routedTo         User?         @relation("RoutedTo", fields: [routedToId], references: [id])
+  instructions     String?                       // DC's required actions — owned by Division Chief
+  complexity       DocComplexity @default(SIMPLE)
+  leadTimeDays     Int           @default(3)   // derived from complexity, editable
+  dueDate          DateTime?                    // dateReceived + leadTimeDays, computed on save
+  numCorrections   Int           @default(0)
+  progressRemarks  String?
+  dateCompleted    DateTime?
+  dcSignOffDate    DateTime?                     // when the Division Chief signed off, distinct from ADAS III record-keeping
+  scannedCopyUrl   String?                       // MinIO object key
+  filed            Boolean       @default(false)
+
+  outgoingReplies  OutgoingDocument[]            // documents dispatched in response
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model OutgoingDocument {
+  id                 String            @id @default(cuid())
+  officeId           String
+  office             Office            @relation(fields: [officeId], references: [id])
+
+  dateReleased       DateTime
+  routingNumber      String            @unique // e.g. 070226-MWPTD-DC-004
+  documentTitle      String
+  instructions       String?
+  authorizedBy       String?           // signatory, e.g. "For signature of RD Ritchel M. Butao"
+  receivedBy         String?           // next office/person, free text
+  progressRemarks    String?
+  scannedCopyUrl     String?
+  filed              Boolean           @default(false)
+
+  relatedIncomingId  String?
+  relatedIncoming    IncomingDocument? @relation(fields: [relatedIncomingId], references: [id])
+
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model Activity {
+  id                String    @id @default(cuid())
+  officeId          String
+  office            Office    @relation(fields: [officeId], references: [id])
+
+  date              DateTime
+  activityName      String
+  remarks           String?
+  officeOrderUrl    String?
+  memoUrl           String?
+  inspectionReportUrl String?
+
+  assignees         ActivityAssignee[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// join table: an activity can have multiple people in charge
+model ActivityAssignee {
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@id([activityId, userId])
+}
+
+model Leave {
+  id             String    @id @default(cuid())
+  officeId       String
+  office         Office    @relation(fields: [officeId], references: [id])
+
+  dateFiled      DateTime?
+  leaveStart     DateTime
+  leaveEnd       DateTime?
+  type           LeaveType @default(OTHER)
+  personnelId    String
+  personnel      User      @relation(fields: [personnelId], references: [id])
+  scannedCopyUrl String?
+
+  createdAt      DateTime  @default(now())
+}
+
+// Optional but recommended for a government accountability system:
+// every create/update/delete on the tables above should write a row here.
+model AuditLog {
+  id         String   @id @default(cuid())
+  officeId   String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String   // "CREATE" | "UPDATE" | "DELETE"
+  entityType String   // "IncomingDocument" | "OutgoingDocument" | ...
+  entityId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+}
