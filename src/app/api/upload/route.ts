@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { randomUUID } from "crypto";
 import { authOptions } from "@/lib/auth";
-import { minioClient, ensureBucket, SCANS_BUCKET } from "@/lib/minio";
+import { getMinioClient, ensureBucket, SCANS_BUCKET } from "@/lib/minio";
 
 // POST /api/upload — upload a scanned copy / supporting file to MinIO.
 // Object keys are prefixed with the uploader's officeId so downloads can be
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = `${session.user.officeId}/${randomUUID()}-${file.name}`;
 
-  await minioClient.putObject(SCANS_BUCKET, key, buffer, buffer.length, {
+  await getMinioClient().putObject(SCANS_BUCKET, key, buffer, buffer.length, {
     "Content-Type": file.type || "application/octet-stream",
   });
 

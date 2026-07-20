@@ -33,3 +33,6 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# local-only Compose overrides (may contain real secrets)
+docker-compose.override.yml
