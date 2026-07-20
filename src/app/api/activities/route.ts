@@ -46,6 +46,14 @@ export async function POST(req: NextRequest) {
 
   const { date, assigneeIds, ...rest } = parsed.data;
 
+  const uniqueAssigneeIds = [...new Set(assigneeIds)];
+  const validAssignees = await prisma.user.count({
+    where: { id: { in: uniqueAssigneeIds }, officeId: session.user.officeId },
+  });
+  if (validAssignees !== uniqueAssigneeIds.length) {
+    return NextResponse.json({ error: "Invalid assigneeIds" }, { status: 400 });
+  }
+
   const activity = await prisma.activity.create({
     data: {
       ...rest,

@@ -7,7 +7,8 @@ import { canSignOffAsChief, canDelete } from "@/lib/authz";
 import { DeleteButton } from "@/components/DeleteButton";
 import { IncomingForm } from "../IncomingForm";
 
-export default async function EditIncomingPage({ params }: { params: { id: string } }) {
+export default async function EditIncomingPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
 
   const [doc, users] = await Promise.all([

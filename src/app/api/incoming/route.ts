@@ -45,6 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (parsed.data.routedToId) {
+    const routedTo = await prisma.user.findFirst({
+      where: { id: parsed.data.routedToId, officeId: session.user.officeId },
+    });
+    if (!routedTo) {
+      return NextResponse.json({ error: "Invalid routedToId" }, { status: 400 });
+    }
+  }
+
   const { dateReceived, complexity, ...rest } = parsed.data;
   const receivedDate = new Date(dateReceived);
   const dueDate = computeDueDate(receivedDate, complexity);

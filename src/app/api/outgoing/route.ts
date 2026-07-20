@@ -45,6 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (parsed.data.relatedIncomingId) {
+    const relatedIncoming = await prisma.incomingDocument.findFirst({
+      where: { id: parsed.data.relatedIncomingId, officeId: session.user.officeId },
+    });
+    if (!relatedIncoming) {
+      return NextResponse.json({ error: "Invalid relatedIncomingId" }, { status: 400 });
+    }
+  }
+
   const { dateReleased, ...rest } = parsed.data;
 
   const doc = await prisma.outgoingDocument.create({

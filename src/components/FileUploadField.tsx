@@ -28,7 +28,8 @@ export function FileUploadField({ label, value, onChange }: FileUploadFieldProps
     e.target.value = "";
 
     if (!res.ok) {
-      setError("Upload failed. Please try again.");
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Upload failed. Please try again.");
       return;
     }
 
@@ -54,6 +55,7 @@ export function FileUploadField({ label, value, onChange }: FileUploadFieldProps
       )}
       <input
         type="file"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
         onChange={handleFileChange}
         disabled={uploading}
         className="field-input file:mr-3 file:rounded file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-700 dark:file:bg-ink-700 dark:file:text-white/80"

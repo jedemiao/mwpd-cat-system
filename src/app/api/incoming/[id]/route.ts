@@ -28,7 +28,8 @@ const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
 // PATCH /api/incoming/[id] — update an intake record; due date is
 // recomputed if dateReceived or complexity changes. Only the Division Chief
 // (or an Admin) may set dcSignOffDate.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -49,6 +50,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if ("dcSignOffDate" in body && !canSignOffAsChief(session.user.role)) {
     return NextResponse.json({ error: "Only the Division Chief can sign off" }, { status: 403 });
+  }
+
+  if (parsed.data.routedToId) {
+    const routedTo = await prisma.user.findFirst({
+      where: { id: parsed.data.routedToId, officeId: session.user.officeId },
+    });
+    if (!routedTo) {
+      return NextResponse.json({ error: "Invalid routedToId" }, { status: 400 });
+    }
   }
 
   const { dateReceived, dateCompleted, dcSignOffDate, complexity, ...rest } = parsed.data;
@@ -102,7 +112,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 // DELETE /api/incoming/[id] — reserved for Division Chief / Admin, since
 // removing a compliance record shouldn't be a routine data-entry action
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

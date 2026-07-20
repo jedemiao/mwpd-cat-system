@@ -7,7 +7,8 @@ import { canDelete } from "@/lib/authz";
 import { DeleteButton } from "@/components/DeleteButton";
 import { ActivityForm } from "../ActivityForm";
 
-export default async function EditActivityPage({ params }: { params: { id: string } }) {
+export default async function EditActivityPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
 
   const [activity, users] = await Promise.all([

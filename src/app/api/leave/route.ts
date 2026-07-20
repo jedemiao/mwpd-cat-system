@@ -54,6 +54,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const personnel = await prisma.user.findFirst({
+    where: { id: parsed.data.personnelId, officeId: session.user.officeId },
+  });
+  if (!personnel) {
+    return NextResponse.json({ error: "Invalid personnelId" }, { status: 400 });
+  }
+
   const { dateFiled, leaveStart, leaveEnd, ...rest } = parsed.data;
 
   const leave = await prisma.leave.create({

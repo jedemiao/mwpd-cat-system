@@ -18,7 +18,8 @@ const updateSchema = z.object({
 
 // PATCH /api/activities/[id] — update an activity; assigneeIds, if given,
 // replaces the full set of people in charge
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -38,6 +39,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const { date, assigneeIds, ...rest } = parsed.data;
+
+  if (assigneeIds) {
+    const uniqueAssigneeIds = [...new Set(assigneeIds)];
+    const validAssignees = await prisma.user.count({
+      where: { id: { in: uniqueAssigneeIds }, officeId: session.user.officeId },
+    });
+    if (validAssignees !== uniqueAssigneeIds.length) {
+      return NextResponse.json({ error: "Invalid assigneeIds" }, { status: 400 });
+    }
+  }
 
   const activity = await prisma.$transaction(async (tx) => {
     if (assigneeIds) {
@@ -68,7 +79,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/activities/[id] — reserved for Division Chief / Admin
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

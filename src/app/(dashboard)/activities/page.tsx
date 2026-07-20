@@ -12,7 +12,8 @@ type SearchParams = { q?: string; page?: string };
 
 // Server component: fetches directly via Prisma (no client-side fetch needed
 // for the initial render), scoped to the logged-in user's office.
-export default async function ActivitiesPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function ActivitiesPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await getServerSession(authOptions);
   const officeId = session!.user.officeId;
 
