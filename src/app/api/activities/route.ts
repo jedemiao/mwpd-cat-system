@@ -6,7 +6,8 @@ import { logAudit } from "@/lib/auditLog";
 import { z } from "zod";
 
 const createSchema = z.object({
-  date: z.string(), // ISO date string from the client
+  date: z.string(), // ISO date string from the client — start date
+  endDate: z.string().optional(), // set only for multi-day activities; must be >= date
   activityName: z.string(),
   remarks: z.string().optional(),
   officeOrderUrl: z.string().optional(),
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { date, assigneeIds, ...rest } = parsed.data;
+  const { date, endDate, assigneeIds, ...rest } = parsed.data;
 
   const uniqueAssigneeIds = [...new Set(assigneeIds)];
   const validAssignees = await prisma.user.count({
@@ -54,11 +55,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid assigneeIds" }, { status: 400 });
   }
 
+  const startDate = new Date(date);
+  const parsedEndDate = endDate ? new Date(endDate) : null;
+  if (parsedEndDate && parsedEndDate < startDate) {
+    return NextResponse.json({ error: "End date can't be before the start date" }, { status: 400 });
+  }
+
   const activity = await prisma.activity.create({
     data: {
       ...rest,
       officeId: session.user.officeId,
-      date: new Date(date),
+      date: startDate,
+      endDate: parsedEndDate,
       assignees: { create: assigneeIds.map((userId) => ({ userId })) },
     },
     include: { assignees: { include: { user: { select: { name: true } } } } },

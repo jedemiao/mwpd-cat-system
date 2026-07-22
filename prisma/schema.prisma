@@ -124,7 +124,8 @@ model Activity {
   officeId          String
   office            Office    @relation(fields: [officeId], references: [id])
 
-  date              DateTime
+  date              DateTime // start date; single-day activities just use this
+  endDate           DateTime? // set only for multi-day activities; must be >= date
   activityName      String
   remarks           String?
   officeOrderUrl    String?

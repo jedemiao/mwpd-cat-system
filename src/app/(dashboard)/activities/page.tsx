@@ -53,9 +53,22 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           take: PAGE_SIZE,
         })
       : prisma.activity.findMany({
+          // Match activities whose [date, endDate] range overlaps the visible
+          // month at all, not just ones starting in it — a multi-day activity
+          // that starts in June and runs into July must still show on July's
+          // grid days. Uses AND (not a second top-level OR) so this doesn't
+          // clobber the search filter's own OR above.
           where: {
             ...where,
-            date: { gte: new Date(calendarYear, calendarMonth, 1), lt: new Date(calendarYear, calendarMonth + 1, 1) },
+            AND: [
+              { date: { lt: new Date(calendarYear, calendarMonth + 1, 1) } },
+              {
+                OR: [
+                  { endDate: null, date: { gte: new Date(calendarYear, calendarMonth, 1) } },
+                  { endDate: { gte: new Date(calendarYear, calendarMonth, 1) } },
+                ],
+              },
+            ],
           },
           orderBy: { date: "asc" },
           include: { assignees: { include: { user: { select: { name: true } } } } },
@@ -108,6 +121,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           activities={activities.map((activity) => ({
             id: activity.id,
             date: activity.date,
+            endDate: activity.endDate,
             activityName: activity.activityName,
             assignees: activity.assignees.map((a) => ({ id: a.userId, name: a.user.name })),
           }))}
@@ -137,7 +151,10 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
 
                   return (
                     <tr key={activity.id}>
-                      <td className="whitespace-nowrap">{activity.date.toLocaleDateString()}</td>
+                      <td className="whitespace-nowrap">
+                        {activity.date.toLocaleDateString()}
+                        {activity.endDate && ` – ${activity.endDate.toLocaleDateString()}`}
+                      </td>
                       <td>{activity.activityName}</td>
                       <td>{names}</td>
                       <td>{activity.remarks ?? "—"}</td>

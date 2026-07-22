@@ -13,6 +13,7 @@ type ActivityFormProps = {
   redirectTo?: string; // where to navigate after a successful save; defaults to the list view
   initialData?: {
     date?: string;
+    endDate?: string;
     activityName?: string;
     remarks?: string;
     officeOrderUrl?: string;
@@ -28,6 +29,7 @@ const labelClass = "field-label";
 export function ActivityForm({ mode, id, users, redirectTo, initialData }: ActivityFormProps) {
   const router = useRouter();
   const [date, setDate] = useState(initialData?.date ?? "");
+  const [endDate, setEndDate] = useState(initialData?.endDate ?? "");
   const [activityName, setActivityName] = useState(initialData?.activityName ?? "");
   const [remarks, setRemarks] = useState(initialData?.remarks ?? "");
   const [officeOrderUrl, setOfficeOrderUrl] = useState(initialData?.officeOrderUrl ?? "");
@@ -50,10 +52,16 @@ export function ActivityForm({ mode, id, users, redirectTo, initialData }: Activ
       return;
     }
 
+    if (endDate && endDate < date) {
+      setError("End date can't be before the start date.");
+      return;
+    }
+
     setLoading(true);
 
     const body = {
       date,
+      endDate: endDate || (mode === "create" ? undefined : null),
       activityName,
       remarks: remarks || (mode === "create" ? undefined : null),
       officeOrderUrl: officeOrderUrl || (mode === "create" ? undefined : null),
@@ -85,24 +93,39 @@ export function ActivityForm({ mode, id, users, redirectTo, initialData }: Activ
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelClass} htmlFor="date">
-            Date
+            Start date
           </label>
           <input id="date" type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass} htmlFor="activityName">
-            Activity
+          <label className={labelClass} htmlFor="endDate">
+            End date
           </label>
           <input
-            id="activityName"
-            type="text"
-            required
-            placeholder="Inspection of Overseas Corporations"
-            value={activityName}
-            onChange={(e) => setActivityName(e.target.value)}
+            id="endDate"
+            type="date"
+            min={date || undefined}
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
             className={inputClass}
           />
+          <p className="mt-1 text-xs text-ink-500 dark:text-white/40">Leave blank for a single-day activity.</p>
         </div>
+      </div>
+
+      <div>
+        <label className={labelClass} htmlFor="activityName">
+          Activity
+        </label>
+        <input
+          id="activityName"
+          type="text"
+          required
+          placeholder="Inspection of Overseas Corporations"
+          value={activityName}
+          onChange={(e) => setActivityName(e.target.value)}
+          className={inputClass}
+        />
       </div>
 
       <div>

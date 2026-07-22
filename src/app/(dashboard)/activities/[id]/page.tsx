@@ -34,6 +34,7 @@ export default async function EditActivityPage(props: { params: Promise<{ id: st
         users={users}
         initialData={{
           date: toDateInputValue(activity.date),
+          endDate: toDateInputValue(activity.endDate),
           activityName: activity.activityName,
           remarks: activity.remarks ?? "",
           officeOrderUrl: activity.officeOrderUrl ?? "",

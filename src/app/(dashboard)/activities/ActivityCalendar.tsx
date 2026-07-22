@@ -27,6 +27,7 @@ function pillClassFor(assigneeIds: string[]) {
 type CalendarActivity = {
   id: string;
   date: Date;
+  endDate: Date | null;
   activityName: string;
   assignees: { id: string; name: string }[];
 };
@@ -68,9 +69,17 @@ export function ActivityCalendar({
 
   const byDay = new Map<string, CalendarActivity[]>();
   for (const activity of activities) {
-    const key = dateKey(activity.date);
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key)!.push(activity);
+    // Multi-day activities get a pill on every day they span, not just the start.
+    const last = activity.endDate ?? activity.date;
+    for (
+      let d = new Date(activity.date.getFullYear(), activity.date.getMonth(), activity.date.getDate());
+      d <= last;
+      d.setDate(d.getDate() + 1)
+    ) {
+      const key = dateKey(d);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push(activity);
+    }
   }
 
   const prev = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
@@ -160,16 +169,21 @@ export function ActivityCalendar({
                 )}
               </div>
               <div className="space-y-1">
-                {dayActivities.map((activity) => (
-                  <Link
-                    key={activity.id}
-                    href={`/activities/${activity.id}`}
-                    title={`${activity.activityName}${activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : ""}`}
-                    className={`block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${pillClassFor(activity.assignees.map((a) => a.id))}`}
-                  >
-                    {activity.activityName}
-                  </Link>
-                ))}
+                {dayActivities.map((activity) => {
+                  const range = activity.endDate
+                    ? ` (${activity.date.toLocaleDateString()} – ${activity.endDate.toLocaleDateString()})`
+                    : "";
+                  return (
+                    <Link
+                      key={activity.id}
+                      href={`/activities/${activity.id}`}
+                      title={`${activity.activityName}${range}${activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : ""}`}
+                      className={`block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${pillClassFor(activity.assignees.map((a) => a.id))}`}
+                    >
+                      {activity.activityName}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           );

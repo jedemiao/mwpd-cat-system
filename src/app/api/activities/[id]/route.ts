@@ -8,6 +8,7 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   date: z.string().optional(),
+  endDate: z.string().nullable().optional(),
   activityName: z.string().optional(),
   remarks: z.string().nullable().optional(),
   officeOrderUrl: z.string().nullable().optional(),
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { date, assigneeIds, ...rest } = parsed.data;
+  const { date, endDate, assigneeIds, ...rest } = parsed.data;
 
   if (assigneeIds) {
     const uniqueAssigneeIds = [...new Set(assigneeIds)];
@@ -50,6 +51,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     }
   }
 
+  const nextDate = date ? new Date(date) : existing.date;
+  const nextEndDate = endDate === undefined ? existing.endDate : endDate ? new Date(endDate) : null;
+  if (nextEndDate && nextEndDate < nextDate) {
+    return NextResponse.json({ error: "End date can't be before the start date" }, { status: 400 });
+  }
+
   const activity = await prisma.$transaction(async (tx) => {
     if (assigneeIds) {
       await tx.activityAssignee.deleteMany({ where: { activityId: existing.id } });
@@ -59,7 +66,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       where: { id: existing.id },
       data: {
         ...rest,
-        date: date ? new Date(date) : undefined,
+        date: date ? nextDate : undefined,
+        endDate: endDate === undefined ? undefined : nextEndDate,
         ...(assigneeIds ? { assignees: { create: assigneeIds.map((userId) => ({ userId })) } } : {}),
       },
       include: { assignees: { include: { user: { select: { name: true } } } } },
