@@ -3,14 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/auditLog";
+import { buildOutgoingRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
 import { z } from "zod";
 
 const createSchema = z.object({
   dateReleased: z.string(), // ISO date string from the client
-  routingNumber: z.string(),
+  documentType: z.enum(DOCUMENT_TYPE_CODE_VALUES),
   documentTitle: z.string(),
   instructions: z.string().optional(),
-  authorizedBy: z.string().optional(),
   receivedBy: z.string().optional(),
   relatedIncomingId: z.string().optional(),
 });
@@ -54,14 +54,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { dateReleased, ...rest } = parsed.data;
+  const { dateReleased, documentType, ...rest } = parsed.data;
+  const releasedDate = new Date(dateReleased);
 
-  const doc = await prisma.outgoingDocument.create({
-    data: {
-      ...rest,
-      officeId: session.user.officeId,
-      dateReleased: new Date(dateReleased),
-    },
+  // Atomically claim the next sequence number and create the record
+  // together, so two simultaneous dispatches can't collide on a number.
+  const doc = await prisma.$transaction(async (tx) => {
+    const office = await tx.office.update({
+      where: { id: session.user.officeId },
+      data: { outgoingSeqCounter: { increment: 1 } },
+      select: { outgoingSeqCounter: true, code: true },
+    });
+    const officePrefix = office.code.split("-")[0];
+
+    return tx.outgoingDocument.create({
+      data: {
+        ...rest,
+        officeId: session.user.officeId,
+        routingNumber: buildOutgoingRoutingNumber(releasedDate, officePrefix, documentType, office.outgoingSeqCounter),
+        dateReleased: releasedDate,
+      },
+    });
   });
 
   await logAudit({

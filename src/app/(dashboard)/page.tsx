@@ -43,7 +43,7 @@ export default async function DashboardHomePage() {
       where: { officeId },
       orderBy: { dateReceived: "desc" },
       take: 5,
-      include: { routedTo: { select: { name: true } } },
+      include: { routedTo: { include: { user: { select: { name: true } } } } },
     }),
     prisma.outgoingDocument.findMany({
       where: { officeId },
@@ -170,7 +170,9 @@ export default async function DashboardHomePage() {
                     </Link>{" "}
                     <span className="text-ink-500 dark:text-white/40">{doc.documentTitle}</span>
                   </span>
-                  <span className="whitespace-nowrap text-ink-500 dark:text-white/40">{doc.routedTo?.name ?? "Unassigned"}</span>
+                  <span className="whitespace-nowrap text-ink-500 dark:text-white/40">
+                    {doc.routedTo.length > 0 ? doc.routedTo.map((r) => r.user.name).join(", ") : "Unassigned"}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -12,7 +12,10 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
   const session = await getServerSession(authOptions);
 
   const [doc, users] = await Promise.all([
-    prisma.incomingDocument.findFirst({ where: { id: params.id, officeId: session!.user.officeId } }),
+    prisma.incomingDocument.findFirst({
+      where: { id: params.id, officeId: session!.user.officeId },
+      include: { routedTo: { select: { userId: true } } },
+    }),
     prisma.user.findMany({
       where: { officeId: session!.user.officeId },
       orderBy: { name: "asc" },
@@ -34,7 +37,7 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
           dateReceived: toDateInputValue(doc.dateReceived),
           routingNumber: doc.routingNumber,
           documentTitle: doc.documentTitle,
-          routedToId: doc.routedToId ?? "",
+          routedToIds: doc.routedTo.map((r) => r.userId),
           instructions: doc.instructions ?? "",
           complexity: doc.complexity,
           numCorrections: doc.numCorrections,

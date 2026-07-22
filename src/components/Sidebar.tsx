@@ -4,7 +4,17 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GridIcon, InboxIcon, SendIcon, ClipboardListIcon, UsersIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import {
+  GridIcon,
+  InboxIcon,
+  SendIcon,
+  ClipboardListIcon,
+  UsersIcon,
+  ArchiveIcon,
+  FolderIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "./icons";
 
 type NavItem = {
   href: string;
@@ -28,11 +38,13 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
     { href: "/outgoing", label: "Outgoing", icon: <SendIcon className="h-[18px] w-[18px]" /> },
     { href: "/activities", label: "Monthly activity", icon: <ClipboardListIcon className="h-[18px] w-[18px]" /> },
     { href: "/leave", label: "Leave", icon: <UsersIcon className="h-[18px] w-[18px]" /> },
+    { href: "/internal", label: "Internal", icon: <ArchiveIcon className="h-[18px] w-[18px]" /> },
+    { href: "/forms", label: "Forms", icon: <FolderIcon className="h-[18px] w-[18px]" /> },
   ];
 
   return (
     <aside
-      className={`relative flex h-screen shrink-0 flex-col bg-ink-900 text-white transition-[width] duration-200 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-ink-900 text-white transition-[width] duration-200 ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >

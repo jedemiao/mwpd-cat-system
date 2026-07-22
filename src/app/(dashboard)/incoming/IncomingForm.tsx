@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUploadField } from "@/components/FileUploadField";
+import { DOCUMENT_TYPE_CODES, type DocumentTypeCode } from "@/lib/documentTypeCodes";
 
 type Option = { id: string; name: string };
 type Complexity = "SIMPLE" | "COMPLEX" | "HIGHLY_TECHNICAL";
@@ -16,7 +17,7 @@ type IncomingFormProps = {
     dateReceived?: string;
     routingNumber?: string;
     documentTitle?: string;
-    routedToId?: string;
+    routedToIds?: string[];
     instructions?: string;
     complexity?: Complexity;
     numCorrections?: number;
@@ -30,13 +31,22 @@ type IncomingFormProps = {
 
 const inputClass = "field-input";
 const labelClass = "field-label";
+const readOnlyClass =
+  "rounded-md border border-ink-400/20 bg-surface px-3 py-2 text-sm text-ink-500 dark:border-white/10 dark:bg-ink-900 dark:text-white/40";
+
+const COMPLEXITY_LABEL: Record<Complexity, string> = {
+  SIMPLE: "Simple — 3 days",
+  COMPLEX: "Complex — 7 days",
+  HIGHLY_TECHNICAL: "Highly technical — 20 days",
+};
 
 export function IncomingForm({ mode, id, users, canSignOff, initialData }: IncomingFormProps) {
   const router = useRouter();
   const [dateReceived, setDateReceived] = useState(initialData?.dateReceived ?? "");
   const [routingNumber, setRoutingNumber] = useState(initialData?.routingNumber ?? "");
+  const [documentType, setDocumentType] = useState<DocumentTypeCode>("L");
   const [documentTitle, setDocumentTitle] = useState(initialData?.documentTitle ?? "");
-  const [routedToId, setRoutedToId] = useState(initialData?.routedToId ?? "");
+  const [routedToIds, setRoutedToIds] = useState<string[]>(initialData?.routedToIds ?? []);
   const [instructions, setInstructions] = useState(initialData?.instructions ?? "");
   const [complexity, setComplexity] = useState<Complexity>(initialData?.complexity ?? "SIMPLE");
   const [numCorrections, setNumCorrections] = useState(initialData?.numCorrections ?? 0);
@@ -48,6 +58,10 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function toggleRoutedTo(userId: string) {
+    setRoutedToIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -57,23 +71,31 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
       mode === "create"
         ? {
             dateReceived,
-            routingNumber,
+            documentType,
             documentTitle,
-            routedToId: routedToId || undefined,
-            instructions: instructions || undefined,
-            complexity,
+            ...(canSignOff
+              ? {
+                  routedToIds,
+                  instructions: instructions || undefined,
+                  complexity,
+                }
+              : {}),
           }
         : {
             dateReceived,
             routingNumber,
             documentTitle,
-            routedToId: routedToId || null,
-            instructions: instructions || null,
-            complexity,
-            numCorrections,
+            ...(canSignOff
+              ? {
+                  routedToIds,
+                  instructions: instructions || null,
+                  complexity,
+                  numCorrections,
+                  dateCompleted: dateCompleted || null,
+                  dcSignOffDate: dcSignOffDate || null,
+                }
+              : {}),
             progressRemarks: progressRemarks || null,
-            dateCompleted: dateCompleted || null,
-            ...(canSignOff ? { dcSignOffDate: dcSignOffDate || null } : {}),
             scannedCopyUrl: scannedCopyUrl || null,
             filed,
           };
@@ -113,18 +135,42 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
           />
         </div>
         <div>
-          <label className={labelClass} htmlFor="routingNumber">
-            Routing number
-          </label>
-          <input
-            id="routingNumber"
-            type="text"
-            required
-            placeholder="070126-L-008"
-            value={routingNumber}
-            onChange={(e) => setRoutingNumber(e.target.value)}
-            className={inputClass}
-          />
+          {mode === "create" ? (
+            <>
+              <label className={labelClass} htmlFor="documentType">
+                Document type
+              </label>
+              <select
+                id="documentType"
+                value={documentType}
+                onChange={(e) => setDocumentType(e.target.value as DocumentTypeCode)}
+                className={inputClass}
+              >
+                {DOCUMENT_TYPE_CODES.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.code} — {t.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+                Routing number is generated automatically from the date received, type, and next sequence number.
+              </p>
+            </>
+          ) : (
+            <>
+              <label className={labelClass} htmlFor="routingNumber">
+                Routing number
+              </label>
+              <input
+                id="routingNumber"
+                type="text"
+                required
+                value={routingNumber}
+                onChange={(e) => setRoutingNumber(e.target.value)}
+                className={inputClass}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -142,24 +188,36 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass} htmlFor="routedTo">
-            Routed to
-          </label>
-          <select id="routedTo" value={routedToId} onChange={(e) => setRoutedToId(e.target.value)} className={inputClass}>
-            <option value="">— Unassigned —</option>
+      <div>
+        <span className={labelClass}>Routed to</span>
+        {canSignOff ? (
+          <div className="grid grid-cols-2 gap-2 rounded-md border border-ink-400/30 p-3 dark:border-white/15">
             {users.map((u) => (
-              <option key={u.id} value={u.id}>
+              <label key={u.id} className="flex items-center gap-2 text-sm text-ink-700 dark:text-white/70">
+                <input
+                  type="checkbox"
+                  className="field-checkbox"
+                  checked={routedToIds.includes(u.id)}
+                  onChange={() => toggleRoutedTo(u.id)}
+                />
                 {u.name}
-              </option>
+              </label>
             ))}
-          </select>
-        </div>
-        <div>
-          <label className={labelClass} htmlFor="complexity">
-            Complexity (ARTA)
-          </label>
+          </div>
+        ) : (
+          <p className={readOnlyClass}>
+            {routedToIds.length > 0
+              ? routedToIds.map((id) => users.find((u) => u.id === id)?.name ?? id).join(", ")
+              : "— Unassigned —"}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className={labelClass} htmlFor="complexity">
+          Complexity (ARTA)
+        </label>
+        {canSignOff ? (
           <select
             id="complexity"
             value={complexity}
@@ -170,20 +228,28 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
             <option value="COMPLEX">Complex — 7 days</option>
             <option value="HIGHLY_TECHNICAL">Highly technical — 20 days</option>
           </select>
-        </div>
+        ) : (
+          <p className={readOnlyClass}>{COMPLEXITY_LABEL[complexity]}</p>
+        )}
       </div>
 
       <div>
         <label className={labelClass} htmlFor="instructions">
           Instruction / required actions (DC)
         </label>
-        <textarea
-          id="instructions"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          className={inputClass}
-          rows={2}
-        />
+        {canSignOff ? (
+          <textarea
+            id="instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            className={inputClass}
+            rows={2}
+          />
+        ) : (
+          <p className={`${readOnlyClass} whitespace-pre-wrap`}>
+            {instructions || "Not yet set — only the Division Chief can set this"}
+          </p>
+        )}
       </div>
 
       {mode === "edit" && (
@@ -195,26 +261,34 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
               <label className={labelClass} htmlFor="numCorrections">
                 No. of corrections
               </label>
-              <input
-                id="numCorrections"
-                type="number"
-                min={0}
-                value={numCorrections}
-                onChange={(e) => setNumCorrections(Number(e.target.value))}
-                className={inputClass}
-              />
+              {canSignOff ? (
+                <input
+                  id="numCorrections"
+                  type="number"
+                  min={0}
+                  value={numCorrections}
+                  onChange={(e) => setNumCorrections(Number(e.target.value))}
+                  className={inputClass}
+                />
+              ) : (
+                <p className={readOnlyClass}>{numCorrections}</p>
+              )}
             </div>
             <div>
               <label className={labelClass} htmlFor="dateCompleted">
                 Date task completed
               </label>
-              <input
-                id="dateCompleted"
-                type="date"
-                value={dateCompleted}
-                onChange={(e) => setDateCompleted(e.target.value)}
-                className={inputClass}
-              />
+              {canSignOff ? (
+                <input
+                  id="dateCompleted"
+                  type="date"
+                  value={dateCompleted}
+                  onChange={(e) => setDateCompleted(e.target.value)}
+                  className={inputClass}
+                />
+              ) : (
+                <p className={readOnlyClass}>{dateCompleted || "Not yet completed"}</p>
+              )}
             </div>
           </div>
 
@@ -245,9 +319,7 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
                   className={inputClass}
                 />
               ) : (
-                <p className="rounded-md border border-ink-400/20 bg-surface px-3 py-2 text-sm text-ink-500 dark:border-white/10 dark:bg-ink-900 dark:text-white/40">
-                  {dcSignOffDate || "Not yet signed off"} — only the Division Chief can set this
-                </p>
+                <p className={readOnlyClass}>{dcSignOffDate || "Not yet signed off"} — only the Division Chief can set this</p>
               )}
             </div>
             <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />

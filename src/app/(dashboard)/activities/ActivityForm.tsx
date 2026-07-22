@@ -10,6 +10,7 @@ type ActivityFormProps = {
   mode: "create" | "edit";
   id?: string;
   users: Option[];
+  redirectTo?: string; // where to navigate after a successful save; defaults to the list view
   initialData?: {
     date?: string;
     activityName?: string;
@@ -24,7 +25,7 @@ type ActivityFormProps = {
 const inputClass = "field-input";
 const labelClass = "field-label";
 
-export function ActivityForm({ mode, id, users, initialData }: ActivityFormProps) {
+export function ActivityForm({ mode, id, users, redirectTo, initialData }: ActivityFormProps) {
   const router = useRouter();
   const [date, setDate] = useState(initialData?.date ?? "");
   const [activityName, setActivityName] = useState(initialData?.activityName ?? "");
@@ -75,7 +76,7 @@ export function ActivityForm({ mode, id, users, initialData }: ActivityFormProps
       return;
     }
 
-    router.push("/activities");
+    router.push(redirectTo ?? "/activities");
     router.refresh();
   }
 

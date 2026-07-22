@@ -11,7 +11,6 @@ const updateSchema = z.object({
   routingNumber: z.string().optional(),
   documentTitle: z.string().optional(),
   instructions: z.string().nullable().optional(),
-  authorizedBy: z.string().nullable().optional(),
   receivedBy: z.string().nullable().optional(),
   relatedIncomingId: z.string().nullable().optional(),
   progressRemarks: z.string().nullable().optional(),

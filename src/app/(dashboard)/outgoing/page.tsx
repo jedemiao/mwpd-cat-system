@@ -84,7 +84,6 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
               <th>Routing number</th>
               <th>Document title</th>
               <th>Answers incoming #</th>
-              <th>Authorized by</th>
               <th>Received by</th>
               <th>Status</th>
               <th>Scanned copy</th>
@@ -98,7 +97,6 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
                 <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
                 <td>{doc.documentTitle}</td>
                 <td className="whitespace-nowrap font-mono text-xs">{doc.relatedIncoming?.routingNumber ?? "—"}</td>
-                <td>{doc.authorizedBy ?? "—"}</td>
                 <td>{doc.receivedBy ?? "—"}</td>
                 <td className="whitespace-nowrap">
                   {doc.filed ? <Badge variant="success">Filed</Badge> : <Badge variant="warning">Pending</Badge>}

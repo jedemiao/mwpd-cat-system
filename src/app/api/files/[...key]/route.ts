@@ -13,7 +13,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ key: stri
   }
 
   const key = params.key.join("/");
-  if (!key.startsWith(`${session.user.officeId}/`)) {
+  // "shared/" is the Forms library — readable by any authenticated user,
+  // regardless of office, since those templates aren't office-specific.
+  if (!key.startsWith("shared/") && !key.startsWith(`${session.user.officeId}/`)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

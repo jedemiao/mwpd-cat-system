@@ -5,13 +5,19 @@ import { prisma } from "@/lib/prisma";
 import { computeDueDate } from "@/lib/artaLeadTime";
 import { logAudit } from "@/lib/auditLog";
 import { publishToUser } from "@/lib/notifyBus";
+import { canSignOffAsChief } from "@/lib/authz";
+import { buildRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
 import { z } from "zod";
+
+// The DC column — see src/lib/authz.ts. Routine intake (date received,
+// routing number, title) is left open to whoever is creating the record.
+const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity"] as const;
 
 const createSchema = z.object({
   dateReceived: z.string(), // ISO date string from the client
-  routingNumber: z.string(),
+  documentType: z.enum(DOCUMENT_TYPE_CODE_VALUES),
   documentTitle: z.string(),
-  routedToId: z.string().optional(),
+  routedToIds: z.array(z.string()).optional(),
   instructions: z.string().optional(),
   complexity: z.enum(["SIMPLE", "COMPLEX", "HIGHLY_TECHNICAL"]).default("SIMPLE"),
 });
@@ -26,7 +32,7 @@ export async function GET(req: NextRequest) {
   const docs = await prisma.incomingDocument.findMany({
     where: { officeId: session.user.officeId },
     orderBy: { dateReceived: "desc" },
-    include: { routedTo: { select: { name: true } } },
+    include: { routedTo: { include: { user: { select: { name: true } } } } },
   });
 
   return NextResponse.json(docs);
@@ -45,30 +51,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if (parsed.data.routedToId) {
-    const routedTo = await prisma.user.findFirst({
-      where: { id: parsed.data.routedToId, officeId: session.user.officeId },
+  if (CHIEF_ONLY_FIELDS.some((f) => f in body) && !canSignOffAsChief(session.user.role)) {
+    return NextResponse.json({ error: "Only the Division Chief can set routing, complexity, or instructions" }, { status: 403 });
+  }
+
+  const routedToIds = [...new Set(parsed.data.routedToIds ?? [])];
+  if (routedToIds.length > 0) {
+    const validRoutedTo = await prisma.user.count({
+      where: { id: { in: routedToIds }, officeId: session.user.officeId },
     });
-    if (!routedTo) {
-      return NextResponse.json({ error: "Invalid routedToId" }, { status: 400 });
+    if (validRoutedTo !== routedToIds.length) {
+      return NextResponse.json({ error: "Invalid routedToIds" }, { status: 400 });
     }
   }
 
-  const { dateReceived, complexity, ...rest } = parsed.data;
+  const { dateReceived, documentType, complexity, routedToIds: _routedToIds, ...rest } = parsed.data;
   const receivedDate = new Date(dateReceived);
   const dueDate = computeDueDate(receivedDate, complexity);
 
   const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
 
-  const doc = await prisma.incomingDocument.create({
-    data: {
-      ...rest,
-      officeId: session.user.officeId,
-      dateReceived: receivedDate,
-      complexity,
-      leadTimeDays: leadDaysMap[complexity],
-      dueDate,
-    },
+  // Atomically claim the next sequence number and create the record together,
+  // so two simultaneous intakes can never be handed the same routing number.
+  const doc = await prisma.$transaction(async (tx) => {
+    const office = await tx.office.update({
+      where: { id: session.user.officeId },
+      data: { incomingSeqCounter: { increment: 1 } },
+      select: { incomingSeqCounter: true },
+    });
+
+    return tx.incomingDocument.create({
+      data: {
+        ...rest,
+        officeId: session.user.officeId,
+        routingNumber: buildRoutingNumber(receivedDate, documentType, office.incomingSeqCounter),
+        dateReceived: receivedDate,
+        complexity,
+        leadTimeDays: leadDaysMap[complexity],
+        dueDate,
+        routedTo: { create: routedToIds.map((userId) => ({ userId })) },
+      },
+    });
   });
 
   await logAudit({
@@ -80,8 +103,9 @@ export async function POST(req: NextRequest) {
     details: parsed.data,
   });
 
-  if (doc.routedToId && doc.routedToId !== session.user.id) {
-    publishToUser(doc.routedToId, {
+  for (const userId of routedToIds) {
+    if (userId === session.user.id) continue;
+    publishToUser(userId, {
       type: "incoming-routed",
       documentId: doc.id,
       routingNumber: doc.routingNumber,

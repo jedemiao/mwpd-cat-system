@@ -8,14 +8,15 @@ const prisma = new PrismaClient();
 // middle initials and honorifics dropped). Replace usernames/passwords
 // before real use — this is a starting seed only.
 const STAFF = [
-  { name: "Chief Anthony C. Fuentes", username: "anthony.fuentes", role: Role.DIVISION_CHIEF },
+  { name: "Anthony C. Fuentes", username: "anthony.fuentes", role: Role.DIVISION_CHIEF },
   { name: "Atty. Marinelle Aycee M. Perral", username: "marinelleaycee.perral", role: Role.STAFF },
-  { name: "Cherryl C. Oculam", username: "cherryl.oculam", role: Role.RECORDS_STAFF },
+  { name: "Cherryl C. Oculam", username: "cherryl.oculam", role: Role.STAFF },
   { name: "Apple Mae C. Tandoy", username: "applemae.tandoy", role: Role.STAFF },
   { name: "Chris Ann M. Cabodbod", username: "chrisann.cabodbod", role: Role.STAFF },
   { name: "Al S. Polinar", username: "al.polinar", role: Role.STAFF },
   { name: "Ray Angelo A. Sajor", username: "rayangelo.sajor", role: Role.STAFF },
   { name: "Shella Claire L. Sombilon", username: "shellaclaire.sombilon", role: Role.STAFF },
+  { name: "Admin Staff", username: "admin", role: Role.RECORDS_STAFF },
 ];
 
 async function main() {

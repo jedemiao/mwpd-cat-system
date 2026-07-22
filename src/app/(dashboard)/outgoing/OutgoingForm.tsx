@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUploadField } from "@/components/FileUploadField";
+import { DOCUMENT_TYPE_CODES, type DocumentTypeCode } from "@/lib/documentTypeCodes";
 
 type IncomingOption = { id: string; routingNumber: string; documentTitle: string };
 
@@ -15,7 +16,6 @@ type OutgoingFormProps = {
     routingNumber?: string;
     documentTitle?: string;
     instructions?: string;
-    authorizedBy?: string;
     receivedBy?: string;
     relatedIncomingId?: string;
     progressRemarks?: string;
@@ -31,9 +31,9 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
   const router = useRouter();
   const [dateReleased, setDateReleased] = useState(initialData?.dateReleased ?? "");
   const [routingNumber, setRoutingNumber] = useState(initialData?.routingNumber ?? "");
+  const [documentType, setDocumentType] = useState<DocumentTypeCode>("L");
   const [documentTitle, setDocumentTitle] = useState(initialData?.documentTitle ?? "");
   const [instructions, setInstructions] = useState(initialData?.instructions ?? "");
-  const [authorizedBy, setAuthorizedBy] = useState(initialData?.authorizedBy ?? "");
   const [receivedBy, setReceivedBy] = useState(initialData?.receivedBy ?? "");
   const [relatedIncomingId, setRelatedIncomingId] = useState(initialData?.relatedIncomingId ?? "");
   const [progressRemarks, setProgressRemarks] = useState(initialData?.progressRemarks ?? "");
@@ -51,10 +51,9 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
       mode === "create"
         ? {
             dateReleased,
-            routingNumber,
+            documentType,
             documentTitle,
             instructions: instructions || undefined,
-            authorizedBy: authorizedBy || undefined,
             receivedBy: receivedBy || undefined,
             relatedIncomingId: relatedIncomingId || undefined,
           }
@@ -63,7 +62,6 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
             routingNumber,
             documentTitle,
             instructions: instructions || null,
-            authorizedBy: authorizedBy || null,
             receivedBy: receivedBy || null,
             relatedIncomingId: relatedIncomingId || null,
             progressRemarks: progressRemarks || null,
@@ -106,18 +104,42 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
           />
         </div>
         <div>
-          <label className={labelClass} htmlFor="routingNumber">
-            Routing number
-          </label>
-          <input
-            id="routingNumber"
-            type="text"
-            required
-            placeholder="070226-MWPTD-DC-004"
-            value={routingNumber}
-            onChange={(e) => setRoutingNumber(e.target.value)}
-            className={inputClass}
-          />
+          {mode === "create" ? (
+            <>
+              <label className={labelClass} htmlFor="documentType">
+                Document type
+              </label>
+              <select
+                id="documentType"
+                value={documentType}
+                onChange={(e) => setDocumentType(e.target.value as DocumentTypeCode)}
+                className={inputClass}
+              >
+                {DOCUMENT_TYPE_CODES.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.code} — {t.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+                Routing number is generated automatically from the date released, type, and next sequence number.
+              </p>
+            </>
+          ) : (
+            <>
+              <label className={labelClass} htmlFor="routingNumber">
+                Routing number
+              </label>
+              <input
+                id="routingNumber"
+                type="text"
+                required
+                value={routingNumber}
+                onChange={(e) => setRoutingNumber(e.target.value)}
+                className={inputClass}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -167,32 +189,17 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass} htmlFor="authorizedBy">
-            Authorized by
-          </label>
-          <input
-            id="authorizedBy"
-            type="text"
-            placeholder="For signature of RD Ritchel M. Butao"
-            value={authorizedBy}
-            onChange={(e) => setAuthorizedBy(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label className={labelClass} htmlFor="receivedBy">
-            Received by
-          </label>
-          <input
-            id="receivedBy"
-            type="text"
-            value={receivedBy}
-            onChange={(e) => setReceivedBy(e.target.value)}
-            className={inputClass}
-          />
-        </div>
+      <div>
+        <label className={labelClass} htmlFor="receivedBy">
+          Received by
+        </label>
+        <input
+          id="receivedBy"
+          type="text"
+          value={receivedBy}
+          onChange={(e) => setReceivedBy(e.target.value)}
+          className={inputClass}
+        />
       </div>
 
       {mode === "edit" && (

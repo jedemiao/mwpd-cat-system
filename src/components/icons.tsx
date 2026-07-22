@@ -174,6 +174,42 @@ export function MoonIcon(props: IconProps) {
   );
 }
 
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="4" width="18" height="4.5" rx="1" />
+      <path d="M4.5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8.5" />
+      <path d="M10 13h4" />
+    </svg>
+  );
+}
+
+export function FolderIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.5l2 2.5H19a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" />
+    </svg>
+  );
+}
+
+export function SettingsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="3.25" />
+      <path d="M12 3.5v2.25M12 18.25v2.25M20.5 12h-2.25M5.75 12H3.5M17.66 6.34l-1.6 1.6M7.94 16.06l-1.6 1.6M17.66 17.66l-1.6-1.6M7.94 7.94l-1.6-1.6" />
+    </svg>
+  );
+}
+
+export function CameraIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5Z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </svg>
+  );
+}
+
 export function EyeOffIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

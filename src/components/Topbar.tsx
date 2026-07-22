@@ -11,7 +11,9 @@ const SECTION_LABEL: Record<string, string> = {
   outgoing: "Outgoing",
   activities: "Monthly activity",
   leave: "Leave",
-  "change-password": "Change password",
+  internal: "Internal",
+  forms: "Forms",
+  settings: "Settings",
 };
 
 function breadcrumbFor(pathname: string) {
@@ -35,10 +37,12 @@ type NotificationSummary = {
 export function Topbar({
   userName,
   userRole,
+  avatarUrl,
   notifications,
 }: {
   userName: string;
   userRole: string;
+  avatarUrl: string | null;
   notifications: NotificationSummary;
 }) {
   const pathname = usePathname();
@@ -61,7 +65,7 @@ export function Topbar({
       <div className="flex items-center gap-2">
         <ThemeToggle />
         <NotificationBell initial={notifications} />
-        <UserMenu userName={userName} userRole={userRole} />
+        <UserMenu userName={userName} userRole={userRole} avatarUrl={avatarUrl} />
       </div>
     </header>
   );

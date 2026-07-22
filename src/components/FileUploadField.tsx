@@ -7,9 +7,11 @@ type FileUploadFieldProps = {
   label: string;
   value: string; // stored MinIO object key, "" if none
   onChange: (key: string) => void;
+  scope?: "office" | "shared"; // "shared" is for the Forms library — readable by every office
+  accept?: string;
 };
 
-export function FileUploadField({ label, value, onChange }: FileUploadFieldProps) {
+export function FileUploadField({ label, value, onChange, scope = "office", accept }: FileUploadFieldProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +24,7 @@ export function FileUploadField({ label, value, onChange }: FileUploadFieldProps
 
     const formData = new FormData();
     formData.append("file", file);
+    if (scope === "shared") formData.append("scope", "shared");
 
     const res = await fetch("/api/upload", { method: "POST", body: formData });
     setUploading(false);
@@ -55,10 +58,10 @@ export function FileUploadField({ label, value, onChange }: FileUploadFieldProps
       )}
       <input
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp"
+        accept={accept ?? "application/pdf,image/jpeg,image/png,image/webp"}
         onChange={handleFileChange}
         disabled={uploading}
-        className="field-input file:mr-3 file:rounded file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-700 dark:file:bg-ink-700 dark:file:text-white/80"
+        className="field-input file:mr-3 file:rounded file:border-0 file:bg-ink-400/25 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-700 dark:file:bg-ink-700 dark:file:text-white/80"
       />
       {uploading && <p className="mt-1 text-sm text-ink-500 dark:text-white/40">Uploading…</p>}
       {error && <p className="mt-1 text-sm text-danger-600">{error}</p>}

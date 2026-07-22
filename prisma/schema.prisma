@@ -40,11 +40,19 @@ model Office {
   code      String   @unique // short code, e.g. "MWPTD-CARAGA"
   createdAt DateTime @default(now())
 
-  users      User[]
-  incoming   IncomingDocument[]
-  outgoing   OutgoingDocument[]
-  activities Activity[]
-  leaves     Leave[]
+  // Monotonic counters for auto-generated routing numbers — a live count()
+  // would reuse numbers after a delete, colliding with the unique
+  // constraint on routingNumber. Separate per module: Incoming and
+  // Outgoing number independently in the source tracker.
+  incomingSeqCounter Int @default(0)
+  outgoingSeqCounter Int @default(0)
+
+  users         User[]
+  incoming      IncomingDocument[]
+  outgoing      OutgoingDocument[]
+  activities    Activity[]
+  leaves        Leave[]
+  internalMemos InternalMemo[]
 }
 
 model User {
@@ -55,12 +63,14 @@ model User {
   username     String   @unique
   passwordHash String
   role         Role     @default(STAFF)
+  avatarUrl    String?  // MinIO object key for the profile photo
   createdAt    DateTime @default(now())
 
-  routedIncoming     IncomingDocument[] @relation("RoutedTo")
+  routedIncoming     IncomingRoutedStaff[]
   activityAssignment ActivityAssignee[]
   leaves             Leave[]
   auditLogs          AuditLog[]
+  formTemplates      FormTemplate[]
 }
 
 model IncomingDocument {
@@ -71,8 +81,7 @@ model IncomingDocument {
   dateReceived     DateTime
   routingNumber    String        @unique // e.g. 070126-L-008
   documentTitle    String
-  routedToId       String?
-  routedTo         User?         @relation("RoutedTo", fields: [routedToId], references: [id])
+  routedTo         IncomingRoutedStaff[]         // Division Chief may route to more than one staff member
   instructions     String?                       // DC's required actions — owned by Division Chief
   complexity       DocComplexity @default(SIMPLE)
   leadTimeDays     Int           @default(3)   // derived from complexity, editable
@@ -98,7 +107,6 @@ model OutgoingDocument {
   routingNumber      String            @unique // e.g. 070226-MWPTD-DC-004
   documentTitle      String
   instructions       String?
-  authorizedBy       String?           // signatory, e.g. "For signature of RD Ritchel M. Butao"
   receivedBy         String?           // next office/person, free text
   progressRemarks    String?
   scannedCopyUrl     String?
@@ -138,6 +146,17 @@ model ActivityAssignee {
   @@id([activityId, userId])
 }
 
+// join table: an incoming document can be routed to multiple staff (the
+// Division Chief may need to assign more than one person to the same document)
+model IncomingRoutedStaff {
+  incomingId String
+  incoming   IncomingDocument @relation(fields: [incomingId], references: [id])
+  userId     String
+  user       User             @relation(fields: [userId], references: [id])
+
+  @@id([incomingId, userId])
+}
+
 model Leave {
   id             String    @id @default(cuid())
   officeId       String
@@ -152,6 +171,42 @@ model Leave {
   scannedCopyUrl String?
 
   createdAt      DateTime  @default(now())
+}
+
+model InternalMemo {
+  id               String    @id @default(cuid())
+  officeId         String
+  office           Office    @relation(fields: [officeId], references: [id])
+
+  dateReleased     DateTime
+  memorandumNumber Int                   // manually entered; unique within the office, not globally (see routingNumber)
+  documentTitle    String
+  instructions     String?
+  receivedBy       String?
+  progressRemarks  String?
+  scannedCopyUrl   String?
+  filed            Boolean   @default(false)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([officeId, memorandumNumber])
+}
+
+// Shared template library — deliberately NOT officeId-scoped, unlike every
+// other table here: these are standard DMW forms reused by every office,
+// not office-specific records. uploadedBy still gives an audit trail.
+model FormTemplate {
+  id           String   @id @default(cuid())
+  number       Int                        // display order, matches the source sheet's "Number" column
+  title        String
+  fileUrl      String                     // MinIO object key, "shared/forms/..." prefix
+  fileName     String                     // original filename, for display/download naming
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Optional but recommended for a government accountability system:

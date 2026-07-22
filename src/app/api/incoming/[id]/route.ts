@@ -12,7 +12,7 @@ const updateSchema = z.object({
   dateReceived: z.string().optional(),
   routingNumber: z.string().optional(),
   documentTitle: z.string().optional(),
-  routedToId: z.string().nullable().optional(),
+  routedToIds: z.array(z.string()).optional(),
   instructions: z.string().nullable().optional(),
   complexity: z.enum(["SIMPLE", "COMPLEX", "HIGHLY_TECHNICAL"]).optional(),
   numCorrections: z.number().int().min(0).optional(),
@@ -25,9 +25,14 @@ const updateSchema = z.object({
 
 const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
 
+// The DC column — see src/lib/authz.ts. Routine record-keeping (date
+// received, routing number, title, progress remarks, scanned copy, filed)
+// stays open to whoever holds the record.
+const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "numCorrections", "dateCompleted", "dcSignOffDate"] as const;
+
 // PATCH /api/incoming/[id] — update an intake record; due date is
 // recomputed if dateReceived or complexity changes. Only the Division Chief
-// (or an Admin) may set dcSignOffDate.
+// (or an Admin) may edit the DC column fields, including dcSignOffDate.
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getServerSession(authOptions);
@@ -37,6 +42,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const existing = await prisma.incomingDocument.findFirst({
     where: { id: params.id, officeId: session.user.officeId },
+    include: { routedTo: { select: { userId: true } } },
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -48,36 +54,44 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  if ("dcSignOffDate" in body && !canSignOffAsChief(session.user.role)) {
-    return NextResponse.json({ error: "Only the Division Chief can sign off" }, { status: 403 });
+  if (CHIEF_ONLY_FIELDS.some((f) => f in body) && !canSignOffAsChief(session.user.role)) {
+    return NextResponse.json({ error: "Only the Division Chief can edit this section" }, { status: 403 });
   }
 
-  if (parsed.data.routedToId) {
-    const routedTo = await prisma.user.findFirst({
-      where: { id: parsed.data.routedToId, officeId: session.user.officeId },
+  const routedToIds = parsed.data.routedToIds ? [...new Set(parsed.data.routedToIds)] : undefined;
+  if (routedToIds && routedToIds.length > 0) {
+    const validRoutedTo = await prisma.user.count({
+      where: { id: { in: routedToIds }, officeId: session.user.officeId },
     });
-    if (!routedTo) {
-      return NextResponse.json({ error: "Invalid routedToId" }, { status: 400 });
+    if (validRoutedTo !== routedToIds.length) {
+      return NextResponse.json({ error: "Invalid routedToIds" }, { status: 400 });
     }
   }
 
-  const { dateReceived, dateCompleted, dcSignOffDate, complexity, ...rest } = parsed.data;
+  const { dateReceived, dateCompleted, dcSignOffDate, complexity, routedToIds: _routedToIds, ...rest } = parsed.data;
 
   const nextDateReceived = dateReceived ? new Date(dateReceived) : existing.dateReceived;
   const nextComplexity = complexity ?? existing.complexity;
   const dueDate = computeDueDate(nextDateReceived, nextComplexity);
 
-  const doc = await prisma.incomingDocument.update({
-    where: { id: existing.id },
-    data: {
-      ...rest,
-      dateReceived: nextDateReceived,
-      complexity: nextComplexity,
-      leadTimeDays: leadDaysMap[nextComplexity],
-      dueDate,
-      dateCompleted: dateCompleted === undefined ? undefined : dateCompleted ? new Date(dateCompleted) : null,
-      dcSignOffDate: dcSignOffDate === undefined ? undefined : dcSignOffDate ? new Date(dcSignOffDate) : null,
-    },
+  const doc = await prisma.$transaction(async (tx) => {
+    if (routedToIds) {
+      await tx.incomingRoutedStaff.deleteMany({ where: { incomingId: existing.id } });
+    }
+
+    return tx.incomingDocument.update({
+      where: { id: existing.id },
+      data: {
+        ...rest,
+        dateReceived: nextDateReceived,
+        complexity: nextComplexity,
+        leadTimeDays: leadDaysMap[nextComplexity],
+        dueDate,
+        dateCompleted: dateCompleted === undefined ? undefined : dateCompleted ? new Date(dateCompleted) : null,
+        dcSignOffDate: dcSignOffDate === undefined ? undefined : dcSignOffDate ? new Date(dcSignOffDate) : null,
+        ...(routedToIds ? { routedTo: { create: routedToIds.map((userId) => ({ userId })) } } : {}),
+      },
+    });
   });
 
   await logAudit({
@@ -89,22 +103,33 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     details: parsed.data,
   });
 
-  // Newly routed (assigned on this update, to someone other than the actor) — live notify them.
-  if (doc.routedToId && doc.routedToId !== existing.routedToId && doc.routedToId !== session.user.id) {
-    publishToUser(doc.routedToId, {
-      type: "incoming-routed",
-      documentId: doc.id,
-      routingNumber: doc.routingNumber,
-      documentTitle: doc.documentTitle,
-    });
-  }
-  // Reassigned away from / unassigned from the previous person — refresh their queue.
-  if (existing.routedToId && existing.routedToId !== doc.routedToId) {
-    publishToUser(existing.routedToId, { type: "incoming-unrouted", documentId: doc.id });
+  if (routedToIds) {
+    const existingIds = new Set(existing.routedTo.map((r) => r.userId));
+    const nextIds = new Set(routedToIds);
+
+    // Newly routed (assigned on this update, to someone other than the actor) — live notify them.
+    for (const userId of routedToIds) {
+      if (existingIds.has(userId) || userId === session.user.id) continue;
+      publishToUser(userId, {
+        type: "incoming-routed",
+        documentId: doc.id,
+        routingNumber: doc.routingNumber,
+        documentTitle: doc.documentTitle,
+      });
+    }
+    // Reassigned away from / unassigned from the previous person(s) — refresh their queue.
+    for (const userId of existingIds) {
+      if (!nextIds.has(userId)) {
+        publishToUser(userId, { type: "incoming-unrouted", documentId: doc.id });
+      }
+    }
   }
   // Marked complete while routed to someone — drop it off their live queue.
-  if (doc.routedToId && !existing.dateCompleted && doc.dateCompleted) {
-    publishToUser(doc.routedToId, { type: "incoming-completed", documentId: doc.id });
+  if (!existing.dateCompleted && doc.dateCompleted) {
+    const notifyIds = routedToIds ?? existing.routedTo.map((r) => r.userId);
+    for (const userId of notifyIds) {
+      publishToUser(userId, { type: "incoming-completed", documentId: doc.id });
+    }
   }
 
   return NextResponse.json(doc);
@@ -130,7 +155,10 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await prisma.incomingDocument.delete({ where: { id: existing.id } });
+  await prisma.$transaction([
+    prisma.incomingRoutedStaff.deleteMany({ where: { incomingId: existing.id } }),
+    prisma.incomingDocument.delete({ where: { id: existing.id } }),
+  ]);
 
   await logAudit({
     officeId: session.user.officeId,

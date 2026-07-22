@@ -34,7 +34,6 @@ export default async function EditOutgoingPage(props: { params: Promise<{ id: st
           routingNumber: doc.routingNumber,
           documentTitle: doc.documentTitle,
           instructions: doc.instructions ?? "",
-          authorizedBy: doc.authorizedBy ?? "",
           receivedBy: doc.receivedBy ?? "",
           relatedIncomingId: doc.relatedIncomingId ?? "",
           progressRemarks: doc.progressRemarks ?? "",

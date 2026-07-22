@@ -50,7 +50,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
     prisma.incomingDocument.findMany({
       where,
       orderBy: { dateReceived: "desc" },
-      include: { routedTo: { select: { name: true } } },
+      include: { routedTo: { include: { user: { select: { name: true } } } } },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
@@ -139,7 +139,9 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                   <td className="whitespace-nowrap">{doc.dateReceived.toLocaleDateString()}</td>
                   <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
                   <td>{doc.documentTitle}</td>
-                  <td className="whitespace-nowrap">{doc.routedTo?.name ?? "—"}</td>
+                  <td className="whitespace-nowrap">
+                    {doc.routedTo.length > 0 ? doc.routedTo.map((r) => r.user.name).join(", ") : "—"}
+                  </td>
                   <td className="whitespace-nowrap">{doc.dueDate?.toLocaleDateString() ?? "—"}</td>
                   <td className="whitespace-nowrap">
                     {doc.dateCompleted ? (
