@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeDueDate } from "@/lib/artaLeadTime";
-import { logAudit } from "@/lib/auditLog";
+import { logAudit, getClientIp } from "@/lib/auditLog";
 import { publishToUser } from "@/lib/notifyBus";
 import { canSignOffAsChief } from "@/lib/authz";
 import { buildRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
   });
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "CREATE",

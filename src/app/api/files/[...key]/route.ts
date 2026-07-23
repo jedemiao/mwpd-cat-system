@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getPresignedDownloadUrl } from "@/lib/minio";
+import { logAudit, getClientIp } from "@/lib/auditLog";
 
 // GET /api/files/[...key] — redirect to a short-lived presigned MinIO URL,
 // after confirming the object belongs to the caller's office.
@@ -18,6 +19,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ key: stri
   if (!key.startsWith("shared/") && !key.startsWith(`${session.user.officeId}/`)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  await logAudit({
+    ipAddress: getClientIp(req),
+    officeId: session.user.officeId,
+    userId: session.user.id,
+    action: "READ",
+    entityType: "File",
+    entityId: key,
+  });
 
   const url = await getPresignedDownloadUrl(key);
   return NextResponse.redirect(url);

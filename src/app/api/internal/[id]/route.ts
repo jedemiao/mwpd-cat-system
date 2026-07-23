@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { logAudit } from "@/lib/auditLog";
+import { logAudit, getClientIp } from "@/lib/auditLog";
 import { canDelete } from "@/lib/authz";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "UPDATE",
@@ -91,6 +92,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   await prisma.internalMemo.delete({ where: { id: existing.id } });
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "DELETE",

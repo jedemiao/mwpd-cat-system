@@ -13,6 +13,8 @@
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
+    "clamscan": "^2.4.0",
+    "file-type": "^22.0.1",
     "minio": "^8.0.1",
     "next": "^16.2.10",
     "next-auth": "^4.24.7",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/clamscan": "^2.4.1",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "autoprefixer": "^10.4.19",

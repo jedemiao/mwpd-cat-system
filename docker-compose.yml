@@ -10,9 +10,15 @@ services:
       - db_data:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5433:5432" # local-only; not exposed beyond the server. Host port 5433 avoids clashing with a native Postgres install on 5432.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql:uid=70,gid=70
+    networks:
+      - db-net
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -23,6 +29,11 @@ services:
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001" # MinIO web console
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - storage-net
 
   app:
     build: .
@@ -30,6 +41,7 @@ services:
     depends_on:
       - db
       - minio
+      - clamav
     environment:
       DATABASE_URL: postgresql://mwpd:${POSTGRES_PASSWORD}@db:5432/mwpd_tracker
       NEXTAUTH_URL: ${NEXTAUTH_URL}
@@ -44,11 +56,47 @@ services:
       # the office server's actual LAN address, e.g. http://192.168.1.50
       # or https://mwpd.local once TLS is enabled.
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      # Docker auto-sets HOSTNAME to the container ID, and the Next.js
+      # standalone server binds to `process.env.HOSTNAME || '0.0.0.0'` — so
+      # without this override it binds to whatever that container-ID
+      # hostname happens to resolve to on ONE of app's three networks,
+      # instead of all interfaces. Silently masked before app had multiple
+      # networks (there was only one interface to bind to); breaks nginx's
+      # proxy_pass once app sits on db-net + storage-net + scan-net.
+      HOSTNAME: "0.0.0.0"
     ports:
       - "127.0.0.1:3000:3000" # only Nginx faces the LAN directly
+    # Read-only root fs: the standalone server holds no state outside the
+    # image itself (uploads go straight to MinIO in memory, never to local
+    # disk) — /tmp covers transient scratch space, and .next/cache is where
+    # Next's image optimizer writes resized/cached images (found by actually
+    # requesting a page with next/image on it — it 500s without this).
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    networks:
+      - db-net
+      - storage-net
+      - scan-net
+
+  clamav:
+    image: clamav/clamav:1.5.3-debian13-slim
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    ports:
+      - "127.0.0.1:3310:3310" # local-only; lets `npm run dev` reach clamd the same way it reaches MinIO
+    # First boot downloads the full virus database via freshclam (several
+    # minutes) — uploads fail closed with a clear error until clamd is ready
+    # (see src/lib/clamav.ts), rather than silently skipping the scan.
+    networks:
+      - scan-net
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.30-alpine
     restart: unless-stopped
     depends_on:
       - app
@@ -58,7 +106,38 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # nginx needs to write its pid file, client body buffers, and proxy/fastcgi
+    # caches — none of that needs to survive a restart, so tmpfs covers it
+    # under a read-only root fs.
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - storage-net
+
+networks:
+  # These are NOT `internal: true`. That was the first attempt at this, but
+  # a container whose only network(s) are internal can't have its ports
+  # published to the host at all — Docker's bridge driver has no gateway
+  # route in or out of an internal network, so db/minio/nginx's published
+  # ports (needed for local dev access and for nginx to face the LAN at
+  # all) silently never bound. Confirmed by testing a bare nginx container
+  # against an internal network before settling on this.
+  #
+  # So segmentation here is topology-only: db-net is scoped to just app+db
+  # (nginx and clamav can't reach the database directly, only through app);
+  # storage-net covers app+minio+nginx, since nginx proxies /mwpd-scans/
+  # straight to minio (see nginx.conf) without going through app. It does
+  # NOT block egress to the LAN/internet the way `internal: true` would —
+  # that's a real gap on this platform, not a design choice. The already-published
+  # ports being bound to 127.0.0.1 (db, minio, clamav) is what actually keeps
+  # them off the LAN; nginx on 80/443 is meant to be LAN-facing.
+  db-net:
+  storage-net:
+  scan-net:
 
 volumes:
   db_data:
   minio_data:
+  clamav_data:

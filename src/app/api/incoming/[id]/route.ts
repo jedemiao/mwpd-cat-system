@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeDueDate } from "@/lib/artaLeadTime";
-import { logAudit } from "@/lib/auditLog";
+import { logAudit, getClientIp } from "@/lib/auditLog";
 import { publishToUser } from "@/lib/notifyBus";
 import { canDelete, canSignOffAsChief } from "@/lib/authz";
 import { z } from "zod";
@@ -95,6 +95,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   });
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "UPDATE",
@@ -161,6 +162,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   ]);
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "DELETE",

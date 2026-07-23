@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { logAudit } from "@/lib/auditLog";
+import { logAudit, getClientIp } from "@/lib/auditLog";
 import { buildOutgoingRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
 import { z } from "zod";
 
@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
   });
 
   await logAudit({
+    ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "CREATE",

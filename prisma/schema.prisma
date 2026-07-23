@@ -217,9 +217,10 @@ model AuditLog {
   officeId   String
   userId     String
   user       User     @relation(fields: [userId], references: [id])
-  action     String   // "CREATE" | "UPDATE" | "DELETE"
-  entityType String   // "IncomingDocument" | "OutgoingDocument" | ...
+  action     String   // "CREATE" | "UPDATE" | "DELETE" | "READ"
+  entityType String   // "IncomingDocument" | "OutgoingDocument" | ... | "File"
   entityId   String
+  ipAddress  String?
   details    Json?
   createdAt  DateTime @default(now())
 }

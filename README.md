@@ -84,9 +84,23 @@ and `leave` — the placeholder folders are already created for you.
 docker compose up -d --build
 ```
 
-This brings up Postgres, MinIO, the Next.js app, and Nginx together. Nginx is
-the only service exposed on ports 80/443 — everything else stays on
+This brings up Postgres, MinIO, ClamAV, the Next.js app, and Nginx together.
+Nginx is the only service exposed on ports 80/443 — everything else stays on
 localhost, matching the architecture diagram discussed earlier.
+
+### Backups
+
+`scripts/backup.sh` dumps Postgres and archives the MinIO data volume, both
+AES256-encrypted with a passphrase before they touch disk:
+
+```
+BACKUP_PASSPHRASE_FILE=/root/.mwpd-backup-passphrase ./scripts/backup.sh /mnt/backup-drive
+```
+
+Wire that into a nightly cron job pointed at removable/offsite storage — see
+the comments in the script for a ready-to-use crontab line. `scripts/restore.sh`
+reverses the process; test it against a scratch stack periodically, since an
+untested backup isn't one you can actually rely on during an incident.
 
 ## Scaling to multiple offices later
 

@@ -36,3 +36,6 @@ yarn-error.log*
 
 # local-only Compose overrides (may contain real secrets)
 docker-compose.override.yml
+
+# encrypted local backups (scripts/backup.sh) — never belong in the repo
+/backups/
