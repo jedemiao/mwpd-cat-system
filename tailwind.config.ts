@@ -53,9 +53,34 @@ const config: Config = {
           500: "#5c6472",
           400: "#8991a0",
         },
+        // Dashboard + chrome signature palette — kept separate from the tokens
+        // above so other modules' buttons/badges/tables are untouched.
+        civic: {
+          50: "#eef2f8",
+          100: "#d7e1ee",
+          300: "#7f99c2",
+          400: "#5678a8",
+          DEFAULT: "#2c4a7a",
+          600: "#1f3760",
+          700: "#182b4a",
+        },
+        dock: {
+          DEFAULT: "#141a29",
+          800: "#1b2338",
+        },
+        stamp: {
+          50: "#fbeae7",
+          DEFAULT: "#a8341f",
+        },
+        duesoon: {
+          50: "#faf1de",
+          DEFAULT: "#96700c",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(33 38 49 / 0.05), 0 1px 3px 0 rgb(33 38 49 / 0.06)",

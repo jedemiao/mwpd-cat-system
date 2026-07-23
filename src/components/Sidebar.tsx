@@ -44,7 +44,7 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-ink-900 text-white transition-[width] duration-200 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-dock text-white transition-[width] duration-200 ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >
@@ -54,8 +54,8 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
         </span>
         {!collapsed && (
           <div className="leading-tight">
-            <p className="text-sm font-semibold">MWPtD Tracker</p>
-            <p className="text-[11px] text-white/50">Protection Division</p>
+            <p className="font-display text-sm font-semibold tracking-tight">MWPtD Tracker</p>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-white/45">DMW · Protection Div.</p>
           </div>
         )}
       </div>
@@ -68,12 +68,16 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
-              className={`relative flex items-center rounded-md py-2 text-sm transition-colors ${
-                collapsed ? "justify-center px-0" : "justify-between px-3"
-              } ${active ? "bg-primary/20 text-white" : "text-white/65 hover:bg-white/5 hover:text-white"}`}
+              className={`relative flex items-center border-l-2 py-2 text-sm transition-colors ${
+                collapsed ? "justify-center border-l-0 px-0" : "justify-between px-3"
+              } ${
+                active
+                  ? "border-civic-400 bg-white/[0.06] text-white"
+                  : "border-transparent text-white/60 hover:bg-white/[0.04] hover:text-white"
+              }`}
             >
               <span className={`flex items-center ${collapsed ? "" : "gap-3"}`}>
-                <span className={`relative ${active ? "text-primary-100" : "text-white/50"}`}>
+                <span className={`relative ${active ? "text-civic-300" : "text-white/45"}`}>
                   {item.icon}
                   {collapsed && item.badge && (
                     <span className={`absolute -right-1 -top-1 h-2 w-2 rounded-full ${item.badge.tone === "danger" ? "bg-danger" : "bg-warning"}`} />
@@ -83,7 +87,7 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
               </span>
               {!collapsed && item.badge && (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white ${
+                  className={`rounded-full px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-white ${
                     item.badge.tone === "danger" ? "bg-danger" : "bg-warning"
                   }`}
                 >
@@ -96,7 +100,9 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
       </nav>
 
       {!collapsed && (
-        <div className="px-5 py-3 text-[11px] text-white/40">Migrant Workers Protection Division</div>
+        <div className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-white/35">
+          Migrant Workers Protection Division
+        </div>
       )}
 
       <button

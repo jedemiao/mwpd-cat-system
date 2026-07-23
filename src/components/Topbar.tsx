@@ -49,7 +49,7 @@ export function Topbar({
   const crumbs = breadcrumbFor(pathname);
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-ink-400/15 bg-white px-6 dark:border-white/10 dark:bg-ink-900">
+    <header className="flex h-16 items-center justify-between border-b border-ink-400/15 bg-white px-6 font-display dark:border-white/10 dark:bg-dock">
       <nav className="flex items-center gap-1.5 text-sm text-ink-500 dark:text-white/40">
         <Link href="/" className="hover:text-ink-900 dark:hover:text-white">
           Home
@@ -57,7 +57,7 @@ export function Topbar({
         {crumbs.map((crumb, i) => (
           <span key={i} className="flex items-center gap-1.5">
             <span className="text-ink-400/50 dark:text-white/20">/</span>
-            <span className={i === crumbs.length - 1 ? "font-medium text-ink-900 dark:text-white" : ""}>{crumb}</span>
+            <span className={i === crumbs.length - 1 ? "font-semibold text-ink-900 dark:text-white" : ""}>{crumb}</span>
           </span>
         ))}
       </nav>

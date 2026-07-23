@@ -101,4 +101,18 @@
   .badge-info {
     @apply badge bg-info-50 text-info-600 dark:bg-info/15 dark:text-info;
   }
+
+  /* Dashboard docket board — a deliberately literal "ink stamp" chip for
+     ARTA urgency, kept separate from .badge-* so other modules are untouched. */
+  .stamp-chip {
+    @apply inline-flex shrink-0 -rotate-2 items-center rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider;
+  }
+
+  .stamp-chip-overdue {
+    @apply stamp-chip border-stamp/50 text-stamp dark:border-stamp/40 dark:text-[#e0836f];
+  }
+
+  .stamp-chip-duesoon {
+    @apply stamp-chip border-duesoon/50 text-duesoon dark:border-duesoon/40 dark:text-[#dcb256];
+  }
 }

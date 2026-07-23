@@ -1,9 +1,13 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { SessionProviderWrapper } from "@/components/SessionProviderWrapper";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+// Display face for the dashboard/chrome signature; body copy stays on Inter everywhere.
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-display" });
+// Utility face for routing numbers, dates, and counts — the register's own numbering system.
+const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "MWPtD Tracker",
@@ -22,7 +26,11 @@ const themeInitScript = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

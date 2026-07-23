@@ -13,6 +13,32 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
+type DocketDoc = { id: string; routingNumber: string; documentTitle: string; dueDate: Date | null };
+
+// The docket board is the dashboard's signature element — ARTA due dates rendered
+// like case-file rows, with a stamp chip standing in for the office's ink stamp.
+function DocketRow({ doc, tone }: { doc: DocketDoc; tone: "overdue" | "duesoon" }) {
+  const rule = tone === "overdue" ? "bg-stamp" : "bg-duesoon";
+  const chip = tone === "overdue" ? "stamp-chip-overdue" : "stamp-chip-duesoon";
+  const label = tone === "overdue" ? "Overdue" : "Due soon";
+
+  return (
+    <li className="flex items-center gap-3 border-b border-ink-400/10 py-2.5 last:border-0 dark:border-white/10">
+      <span className={`h-8 w-[3px] shrink-0 rounded-full ${rule}`} />
+      <span className="min-w-0 flex-1">
+        <Link href={`/incoming/${doc.id}`} className="block truncate font-mono text-sm font-semibold text-ink-900 hover:underline dark:text-white">
+          {doc.routingNumber}
+        </Link>
+        <span className="block truncate text-xs text-ink-500 dark:text-white/40">{doc.documentTitle}</span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span className={chip}>{label}</span>
+        <span className="font-mono text-[11px] text-ink-500 dark:text-white/40">{doc.dueDate?.toLocaleDateString()}</span>
+      </span>
+    </li>
+  );
+}
+
 export default async function DashboardHomePage() {
   const session = await getServerSession(authOptions);
   const officeId = session!.user.officeId;
@@ -70,51 +96,52 @@ export default async function DashboardHomePage() {
   return (
     <main className="space-y-6 p-6 lg:p-8">
       <div>
-        <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Dashboard</h1>
-        <p className="text-sm text-ink-500 dark:text-white/40">
+        <h1 className="font-display text-xl font-semibold tracking-tight text-ink-900 dark:text-white">Dashboard</h1>
+        <p className="font-mono text-xs uppercase tracking-wide text-ink-500 dark:text-white/40">
           {today.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
 
-      {/* ARTA compliance is the legally load-bearing metric of this system, so it leads. */}
-      <section className="card p-5">
-        <h2 className="card-title mb-3">ARTA compliance</h2>
-        {overdueDocs.length === 0 && dueSoonDocs.length === 0 ? (
-          <p className="text-sm text-ink-500 dark:text-white/40">Nothing overdue or due soon. All caught up.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {overdueDocs.length > 0 && (
-              <div className="rounded-md border border-danger/25 bg-danger-50 px-4 py-3 dark:border-danger/20 dark:bg-danger/10">
-                <p className="text-sm font-medium text-danger-600 dark:text-danger">{overdueDocs.length} overdue</p>
-                <ul className="mt-2 space-y-1 text-sm text-ink-700 dark:text-white/70">
-                  {overdueDocs.slice(0, 5).map((d) => (
-                    <li key={d.id}>
-                      <Link href={`/incoming/${d.id}`} className="font-medium text-ink-900 dark:text-white underline decoration-danger/40">
-                        {d.routingNumber}
-                      </Link>{" "}
-                      <span className="text-danger-600 dark:text-danger">— due {d.dueDate?.toLocaleDateString()}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {dueSoonDocs.length > 0 && (
-              <div className="rounded-md border border-warning/30 bg-warning-50 px-4 py-3 dark:border-warning/20 dark:bg-warning/10">
-                <p className="text-sm font-medium text-[#92660c] dark:text-warning">{dueSoonDocs.length} due within 2 days</p>
-                <ul className="mt-2 space-y-1 text-sm text-ink-700 dark:text-white/70">
-                  {dueSoonDocs.slice(0, 5).map((d) => (
-                    <li key={d.id}>
-                      <Link href={`/incoming/${d.id}`} className="font-medium text-ink-900 dark:text-white underline decoration-warning/50">
-                        {d.routingNumber}
-                      </Link>{" "}
-                      <span className="text-[#92660c] dark:text-warning">— due {d.dueDate?.toLocaleDateString()}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      {/* ARTA compliance is the legally load-bearing metric of this system, so it leads —
+          rendered as a docket board, since that's how due dates are actually tracked here. */}
+      <section className="card overflow-hidden">
+        <div className="card-header">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-ink-500 dark:text-white/40">
+              Citizen&rsquo;s Charter deadlines
+            </p>
+            <h2 className="font-display text-base font-semibold text-ink-900 dark:text-white">ARTA compliance</h2>
           </div>
-        )}
+          {(overdueDocs.length > 0 || dueSoonDocs.length > 0) && (
+            <p className="font-mono text-xs">
+              {overdueDocs.length > 0 && <span className="font-semibold text-stamp dark:text-[#e0836f]">{overdueDocs.length} overdue</span>}
+              {overdueDocs.length > 0 && dueSoonDocs.length > 0 && <span className="text-ink-400 dark:text-white/25"> · </span>}
+              {dueSoonDocs.length > 0 && <span className="font-semibold text-duesoon dark:text-[#dcb256]">{dueSoonDocs.length} due soon</span>}
+            </p>
+          )}
+        </div>
+        <div className="p-5">
+          {overdueDocs.length === 0 && dueSoonDocs.length === 0 ? (
+            <p className="text-sm text-ink-500 dark:text-white/40">Nothing overdue or due soon. All caught up.</p>
+          ) : (
+            <div className="grid gap-x-8 sm:grid-cols-2">
+              {overdueDocs.length > 0 && (
+                <ul>
+                  {overdueDocs.slice(0, 5).map((d) => (
+                    <DocketRow key={d.id} doc={d} tone="overdue" />
+                  ))}
+                </ul>
+              )}
+              {dueSoonDocs.length > 0 && (
+                <ul>
+                  {dueSoonDocs.slice(0, 5).map((d) => (
+                    <DocketRow key={d.id} doc={d} tone="duesoon" />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Quick stats */}
@@ -153,8 +180,8 @@ export default async function DashboardHomePage() {
         {/* Recent incoming */}
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="card-title">Recent incoming</h2>
-            <Link href="/incoming" className="text-sm text-primary hover:text-primary-600">
+            <h2 className="card-title font-display normal-case tracking-normal text-sm text-ink-900 dark:text-white">Recent incoming</h2>
+            <Link href="/incoming" className="text-sm text-civic hover:text-civic-600 dark:text-civic-300 dark:hover:text-white">
               View all
             </Link>
           </div>
@@ -182,8 +209,8 @@ export default async function DashboardHomePage() {
         {/* Recent outgoing */}
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="card-title">Recent outgoing</h2>
-            <Link href="/outgoing" className="text-sm text-primary hover:text-primary-600">
+            <h2 className="card-title font-display normal-case tracking-normal text-sm text-ink-900 dark:text-white">Recent outgoing</h2>
+            <Link href="/outgoing" className="text-sm text-civic hover:text-civic-600 dark:text-civic-300 dark:hover:text-white">
               View all
             </Link>
           </div>
@@ -211,8 +238,8 @@ export default async function DashboardHomePage() {
         {/* Recent activities */}
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="card-title">Recent activity</h2>
-            <Link href="/activities" className="text-sm text-primary hover:text-primary-600">
+            <h2 className="card-title font-display normal-case tracking-normal text-sm text-ink-900 dark:text-white">Recent activity</h2>
+            <Link href="/activities" className="text-sm text-civic hover:text-civic-600 dark:text-civic-300 dark:hover:text-white">
               View all
             </Link>
           </div>
@@ -226,7 +253,7 @@ export default async function DashboardHomePage() {
                     <Link href={`/activities/${activity.id}`} className="text-ink-900 dark:text-white hover:underline">
                       {activity.activityName}
                     </Link>{" "}
-                    <span className="text-ink-500 dark:text-white/40">{activity.date.toLocaleDateString()}</span>
+                    <span className="font-mono text-xs text-ink-500 dark:text-white/40">{activity.date.toLocaleDateString()}</span>
                   </span>
                   <span className="whitespace-nowrap text-ink-500 dark:text-white/40">
                     {activity.assignees.map((a) => a.user.name).join(", ") || "—"}
@@ -240,8 +267,8 @@ export default async function DashboardHomePage() {
         {/* Staff availability */}
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="card-title">On leave now / this week</h2>
-            <Link href="/leave" className="text-sm text-primary hover:text-primary-600">
+            <h2 className="card-title font-display normal-case tracking-normal text-sm text-ink-900 dark:text-white">On leave now / this week</h2>
+            <Link href="/leave" className="text-sm text-civic hover:text-civic-600 dark:text-civic-300 dark:hover:text-white">
               View all
             </Link>
           </div>
@@ -252,7 +279,7 @@ export default async function DashboardHomePage() {
               {upcomingLeave.map((leave) => (
                 <li key={leave.id} className="flex items-center justify-between border-b border-ink-400/10 dark:border-white/10 pb-2 last:border-0 last:pb-0">
                   <span className="text-ink-900 dark:text-white">{leave.personnel.name}</span>
-                  <span className="whitespace-nowrap text-ink-500 dark:text-white/40">
+                  <span className="whitespace-nowrap font-mono text-xs text-ink-500 dark:text-white/40">
                     {leave.leaveStart.toLocaleDateString()}
                     {leave.leaveEnd ? ` – ${leave.leaveEnd.toLocaleDateString()}` : ""} · {leave.type}
                   </span>

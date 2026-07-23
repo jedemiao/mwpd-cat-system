@@ -2,11 +2,19 @@ import Link from "next/link";
 
 type Tone = "primary" | "info" | "warning" | "danger";
 
-const toneClass: Record<Tone, string> = {
-  primary: "bg-primary",
-  info: "bg-info",
-  warning: "bg-warning",
-  danger: "bg-danger",
+// Left-rule color per tone — index-card tabs, not solid KPI-tile fills.
+const ruleClass: Record<Tone, string> = {
+  primary: "border-l-civic",
+  info: "border-l-info",
+  warning: "border-l-warning",
+  danger: "border-l-danger",
+};
+
+const iconToneClass: Record<Tone, string> = {
+  primary: "text-civic-300",
+  info: "text-info",
+  warning: "text-warning",
+  danger: "text-danger",
 };
 
 export function StatCard({
@@ -25,13 +33,13 @@ export function StatCard({
   return (
     <Link
       href={href}
-      className={`${toneClass[tone]} flex items-center justify-between rounded-lg p-5 text-white shadow-card transition-transform hover:-translate-y-0.5`}
+      className={`${ruleClass[tone]} card flex items-center justify-between border-l-[3px] p-5 transition-colors hover:bg-surface dark:hover:bg-white/[0.03]`}
     >
       <div>
-        <p className="text-2xl font-semibold leading-tight">{value}</p>
-        <p className="text-sm text-white/85">{label}</p>
+        <p className="font-mono text-2xl font-semibold leading-tight text-ink-900 dark:text-white">{value}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-white/40">{label}</p>
       </div>
-      <div className="text-white/70">{icon}</div>
+      <div className={iconToneClass[tone]}>{icon}</div>
     </Link>
   );
 }
