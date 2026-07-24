@@ -56,6 +56,14 @@ services:
       # the office server's actual LAN address, e.g. http://192.168.1.50
       # or https://mwpd.local once TLS is enabled.
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      # next-auth v4 has no `trustHost` authOptions field (that's a v5/Auth.js
+      # API) — this env var is the actual switch. With it set, origin is
+      # derived from the incoming request's Host/X-Forwarded-* headers
+      # instead of the fixed NEXTAUTH_URL, so login works from any address
+      # nginx is reachable on. Safe here because nginx (the only thing that
+      # can reach `app`, which is bound to 127.0.0.1) is the sole entry
+      # point — no spoofed Host header from outside can reach this directly.
+      AUTH_TRUST_HOST: "1"
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
       # Docker auto-sets HOSTNAME to the container ID, and the Next.js

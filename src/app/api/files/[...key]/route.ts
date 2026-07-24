@@ -29,6 +29,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ key: stri
     entityId: key,
   });
 
-  const url = await getPresignedDownloadUrl(key);
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
+  const url = await getPresignedDownloadUrl(key, host ? { host, proto } : undefined);
   return NextResponse.redirect(url);
 }

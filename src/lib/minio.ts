@@ -39,18 +39,18 @@ export async function ensureBucket() {
 // Presigned download URLs are handed to the *browser* as a redirect target,
 // so they must be signed against an endpoint the browser can actually
 // resolve — not MINIO_ENDPOINT, which in the docker-compose deploy is the
-// Docker-internal service name "minio". MINIO_PUBLIC_URL should point at
-// wherever nginx proxies the bucket path back to MinIO (see nginx.conf);
-// it defaults to MINIO_ENDPOINT/MINIO_PORT for local dev, where the app
-// talks to MinIO directly with no reverse proxy in front.
-let publicClient: Client | undefined;
+// Docker-internal service name "minio". Since the server can now be reached
+// on more than one address (see AUTH_TRUST_HOST in docker-compose.yml), the
+// signing target is derived per-request from whatever host/proto the
+// browser actually used — falling back to MINIO_PUBLIC_URL only when no
+// request context is available (e.g. a future non-HTTP caller).
+const publicClients = new Map<string, Client>();
 
-export function getPresignedDownloadUrl(key: string): Promise<string> {
-  if (!publicClient) {
-    const publicUrl = new URL(
-      process.env.MINIO_PUBLIC_URL || `http://${requireEnv("MINIO_ENDPOINT")}:${requireEnv("MINIO_PORT")}`
-    );
-    publicClient = new Client({
+function getPublicClient(publicUrl: URL): Client {
+  const cacheKey = publicUrl.origin;
+  let existing = publicClients.get(cacheKey);
+  if (!existing) {
+    existing = new Client({
       endPoint: publicUrl.hostname,
       port: Number(publicUrl.port) || (publicUrl.protocol === "https:" ? 443 : 80),
       useSSL: publicUrl.protocol === "https:",
@@ -63,6 +63,16 @@ export function getPresignedDownloadUrl(key: string): Promise<string> {
       // connection at all once region is known, so pin it explicitly.
       region: "us-east-1",
     });
+    publicClients.set(cacheKey, existing);
   }
-  return publicClient.presignedGetObject(SCANS_BUCKET, key, 60);
+  return existing;
+}
+
+export function getPresignedDownloadUrl(key: string, request?: { host: string; proto: string }): Promise<string> {
+  const publicUrl = new URL(
+    request
+      ? `${request.proto}://${request.host}`
+      : process.env.MINIO_PUBLIC_URL || `http://${requireEnv("MINIO_ENDPOINT")}:${requireEnv("MINIO_PORT")}`
+  );
+  return getPublicClient(publicUrl).presignedGetObject(SCANS_BUCKET, key, 60);
 }
