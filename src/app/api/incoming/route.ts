@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only the Division Chief can set routing, complexity, or instructions" }, { status: 403 });
   }
 
-  const routedToIds = [...new Set(parsed.data.routedToIds ?? [])];
+  let routedToIds = [...new Set(parsed.data.routedToIds ?? [])];
   if (routedToIds.length > 0) {
     const validRoutedTo = await prisma.user.count({
       where: { id: { in: routedToIds }, officeId: session.user.officeId },
@@ -63,6 +63,17 @@ export async function POST(req: NextRequest) {
     if (validRoutedTo !== routedToIds.length) {
       return NextResponse.json({ error: "Invalid routedToIds" }, { status: 400 });
     }
+  }
+
+  // Intake staff can't set routing themselves (see CHIEF_ONLY_FIELDS above) —
+  // every document they create lands on the Division Chief's desk first, and
+  // the Chief re-routes to actual staff from there.
+  if (!canSignOffAsChief(session.user.role)) {
+    const chiefs = await prisma.user.findMany({
+      where: { officeId: session.user.officeId, role: "DIVISION_CHIEF" },
+      select: { id: true },
+    });
+    routedToIds = chiefs.map((c) => c.id);
   }
 
   const { dateReceived, documentType, complexity, routedToIds: _routedToIds, ...rest } = parsed.data;

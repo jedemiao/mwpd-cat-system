@@ -206,9 +206,11 @@ export function IncomingForm({ mode, id, users, canSignOff, initialData }: Incom
           </div>
         ) : (
           <p className={readOnlyClass}>
-            {routedToIds.length > 0
-              ? routedToIds.map((id) => users.find((u) => u.id === id)?.name ?? id).join(", ")
-              : "— Unassigned —"}
+            {mode === "create"
+              ? "Will be routed to the Division Chief automatically on creation"
+              : routedToIds.length > 0
+                ? routedToIds.map((id) => users.find((u) => u.id === id)?.name ?? id).join(", ")
+                : "— Unassigned —"}
           </p>
         )}
       </div>
