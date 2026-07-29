@@ -146,10 +146,10 @@ export default function LoginPage() {
             priority
             className="h-10 w-10 shrink-0 rounded-full bg-white"
           />
-          <p className="text-[13px] uppercase leading-tight tracking-[0.08em] text-white/90">
-            Department of Migrant Workers
+          <p className="text-[12px] uppercase leading-tight tracking-[0.04em] text-white/90">
+            <span className="whitespace-nowrap">Department of Migrant Workers</span>
             <br />
-            — Regional Office XIII (CARAGA)
+            <span className="whitespace-nowrap">— Regional Office XIII (CARAGA)</span>
           </p>
         </div>
 
