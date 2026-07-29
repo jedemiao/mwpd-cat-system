@@ -13,6 +13,12 @@ const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["500", "600"], var
 export const metadata: Metadata = {
   title: "MWPtD Tracker",
   description: "Communication and activity tracker for MWPD",
+  // Browser-tab favicon: the DMW seal (public/dmw_logo.png, same image as
+  // asset/dmw_logo.png) instead of the browser's default globe.
+  icons: {
+    icon: "/dmw_logo.png",
+    apple: "/dmw_logo.png",
+  },
 };
 
 // Runs before paint so the correct theme applies immediately — without this,
