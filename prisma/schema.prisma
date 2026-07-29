@@ -167,6 +167,7 @@ model Leave {
   leaveStart     DateTime
   leaveEnd       DateTime?
   type           LeaveType @default(OTHER)
+  typeOther      String?               // free-text specification, used when type == OTHER
   personnelId    String
   personnel      User      @relation(fields: [personnelId], references: [id])
   scannedCopyUrl String?

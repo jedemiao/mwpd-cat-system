@@ -34,6 +34,7 @@ export default async function EditLeavePage(props: { params: Promise<{ id: strin
           leaveStart: toDateInputValue(leave.leaveStart),
           leaveEnd: toDateInputValue(leave.leaveEnd),
           type: leave.type,
+          typeOther: leave.typeOther ?? "",
           personnelId: leave.personnelId,
           scannedCopyUrl: leave.scannedCopyUrl ?? "",
         }}

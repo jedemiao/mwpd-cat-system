@@ -11,6 +11,7 @@ const updateSchema = z.object({
   leaveStart: z.string().optional(),
   leaveEnd: z.string().nullable().optional(),
   type: z.enum(["CTO", "VACATION", "SICK", "EMERGENCY", "OTHER"]).optional(),
+  typeOther: z.string().trim().min(1).nullable().optional(),
   personnelId: z.string().optional(),
   scannedCopyUrl: z.string().nullable().optional(),
 });
@@ -47,10 +48,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const { dateFiled, leaveStart, leaveEnd, ...rest } = parsed.data;
 
+  // the effective type after this update (unchanged if not part of the payload)
+  const effectiveType = rest.type ?? existing.type;
+
   const leave = await prisma.leave.update({
     where: { id: existing.id },
     data: {
       ...rest,
+      // clear the free-text specification whenever the type isn't "Other"
+      typeOther: effectiveType === "OTHER" ? rest.typeOther : null,
       dateFiled: dateFiled === undefined ? undefined : dateFiled ? new Date(dateFiled) : null,
       leaveStart: leaveStart ? new Date(leaveStart) : undefined,
       leaveEnd: leaveEnd === undefined ? undefined : leaveEnd ? new Date(leaveEnd) : null,

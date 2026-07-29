@@ -23,6 +23,20 @@ There is no test suite and no ESLint config in this repo yet (`next lint` will p
 
 The Postgres container's host port is remapped to **5433** (not 5432) in `docker-compose.yml`, to avoid clashing with a native Postgres install some dev machines already have running. `DATABASE_URL` in `.env` must match.
 
+### Updating the deployment
+
+`./scripts/update.sh` is the one command to update the running stack. Get the new code in first (`git pull` or your edits), then run it — it backs up, applies migrations to the prod DB, and rebuilds the app, in that order:
+
+```bash
+BACKUP_PASSPHRASE=... ./scripts/update.sh    # or BACKUP_PASSPHRASE_FILE=...
+SKIP_BACKUP=1 ./scripts/update.sh            # only if you just ran a backup
+```
+
+Three things make an update safe here, and they're easy to get wrong by hand — which is why they live in the script:
+- **Data survives rebuilds.** Postgres and MinIO data are in named volumes (`db_data`, `minio_data`); `up -d --build`, `restart`, and plain `down` never touch them. The **one** command that wipes them is `docker compose down -v` — never run it against the deployment. The script never does.
+- **Migrations do NOT run on container startup** (the app just runs `node server.js`). A schema change that ships without `prisma migrate deploy` crashes the app with "column ... does not exist". `update.sh` always runs `migrate deploy` (a no-op when nothing's pending), so you never have to decide whether the schema changed.
+- **Prod migrations use `.env` → port 5433 → the db container**, not `.env.local` → port 5432 (that's the local `npm run dev` database). `prisma migrate deploy` on the host targets the right one via `.env`; `update.sh` relies on this. A bare `prisma migrate dev` also loads `.env`, so it hits prod too — use `migrate deploy` for the deployment, and remember local-dev schema changes must be applied to *both* databases.
+
 ## Architecture
 
 ### Multi-tenancy via `officeId`, enforced at the application layer

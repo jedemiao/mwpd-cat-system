@@ -16,6 +16,7 @@ type LeaveFormProps = {
     leaveStart?: string;
     leaveEnd?: string;
     type?: LeaveType;
+    typeOther?: string;
     personnelId?: string;
     scannedCopyUrl?: string;
   };
@@ -30,6 +31,7 @@ export function LeaveForm({ mode, id, users, initialData }: LeaveFormProps) {
   const [leaveStart, setLeaveStart] = useState(initialData?.leaveStart ?? "");
   const [leaveEnd, setLeaveEnd] = useState(initialData?.leaveEnd ?? "");
   const [type, setType] = useState<LeaveType>(initialData?.type ?? "OTHER");
+  const [typeOther, setTypeOther] = useState(initialData?.typeOther ?? "");
   const [personnelId, setPersonnelId] = useState(initialData?.personnelId ?? "");
   const [scannedCopyUrl, setScannedCopyUrl] = useState(initialData?.scannedCopyUrl ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,8 @@ export function LeaveForm({ mode, id, users, initialData }: LeaveFormProps) {
     setError(null);
     setLoading(true);
 
+    const otherDetail = type === "OTHER" ? typeOther.trim() : "";
+
     const body =
       mode === "create"
         ? {
@@ -47,6 +51,7 @@ export function LeaveForm({ mode, id, users, initialData }: LeaveFormProps) {
             leaveStart,
             leaveEnd: leaveEnd || undefined,
             type,
+            typeOther: otherDetail || undefined,
             personnelId,
             scannedCopyUrl: scannedCopyUrl || undefined,
           }
@@ -55,6 +60,7 @@ export function LeaveForm({ mode, id, users, initialData }: LeaveFormProps) {
             leaveStart,
             leaveEnd: leaveEnd || null,
             type,
+            typeOther: otherDetail || null,
             personnelId,
             scannedCopyUrl: scannedCopyUrl || null,
           };
@@ -141,6 +147,24 @@ export function LeaveForm({ mode, id, users, initialData }: LeaveFormProps) {
           <input id="dateFiled" type="date" value={dateFiled} onChange={(e) => setDateFiled(e.target.value)} className={inputClass} />
         </div>
       </div>
+
+      {type === "OTHER" && (
+        <div>
+          <label className={labelClass} htmlFor="typeOther">
+            Please specify
+          </label>
+          <input
+            id="typeOther"
+            type="text"
+            required
+            maxLength={100}
+            placeholder="e.g. Maternity, Paternity, Bereavement…"
+            value={typeOther}
+            onChange={(e) => setTypeOther(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
 
       <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />
 
