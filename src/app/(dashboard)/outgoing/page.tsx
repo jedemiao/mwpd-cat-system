@@ -71,7 +71,7 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
           <option value="pending">Pending</option>
           <option value="filed">Filed</option>
         </select>
-        <button type="submit" className="btn-secondary">
+        <button type="submit" className="btn-dark">
           Search
         </button>
       </form>

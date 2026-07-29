@@ -112,7 +112,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
           <option value="overdue">Overdue</option>
           <option value="completed">Completed</option>
         </select>
-        <button type="submit" className="btn-secondary">
+        <button type="submit" className="btn-dark">
           Search
         </button>
       </form>

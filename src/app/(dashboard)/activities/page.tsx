@@ -95,7 +95,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400 dark:text-white/30" />
             <input type="text" name="q" defaultValue={q} placeholder="Search activity or remarks…" className="field-input pl-9" />
           </div>
-          <button type="submit" className="btn-secondary">
+          <button type="submit" className="btn-dark">
             Search
           </button>
         </form>
