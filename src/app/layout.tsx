@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { SessionProviderWrapper } from "@/components/SessionProviderWrapper";
 
@@ -31,10 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body className="bg-surface font-sans text-ink-900 dark:bg-ink-900 dark:text-white">
+        {/* Runs before hydration so the correct theme applies without a light flash */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
         <SessionProviderWrapper>{children}</SessionProviderWrapper>
       </body>
     </html>
