@@ -23,6 +23,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Git Bash / MSYS on Windows rewrites Unix-style arguments (like the
+# container's "/data" path) into Windows paths before handing them to
+# docker.exe, which breaks the volume-archive step. Disable that rewriting.
+# The variable is meaningless on Linux, so this is a no-op there.
+export MSYS_NO_PATHCONV=1
+
 BACKUP_DIR="${1:-./backups}"
 TIMESTAMP="$(date +%Y-%m-%dT%H-%M-%S)"
 mkdir -p "$BACKUP_DIR"
