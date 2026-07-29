@@ -44,7 +44,7 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-dock text-white transition-[width] duration-200 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-primary text-white transition-[width] duration-200 ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >
@@ -72,12 +72,12 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
                 collapsed ? "justify-center border-l-0 px-0" : "justify-between px-3"
               } ${
                 active
-                  ? "border-civic-400 bg-white/[0.06] text-white"
-                  : "border-transparent text-white/60 hover:bg-white/[0.04] hover:text-white"
+                  ? "border-white bg-white/15 text-white"
+                  : "border-transparent text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               <span className={`flex items-center ${collapsed ? "" : "gap-3"}`}>
-                <span className={`relative ${active ? "text-civic-300" : "text-white/45"}`}>
+                <span className={`relative ${active ? "text-white" : "text-white/60"}`}>
                   {item.icon}
                   {collapsed && item.badge && (
                     <span className={`absolute -right-1 -top-1 h-2 w-2 rounded-full ${item.badge.tone === "danger" ? "bg-danger" : "bg-warning"}`} />
