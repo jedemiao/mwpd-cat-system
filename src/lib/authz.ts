@@ -15,3 +15,13 @@ export function canSignOffAsChief(role: Role): boolean {
 export function canDelete(role: Role): boolean {
   return role === "DIVISION_CHIEF" || role === "ADMIN";
 }
+
+// Resetting another account's password (for staff who forgot theirs) is an
+// oversight action: the Division Chief — or an Admin standing in — can set a
+// new password for someone in their office without knowing the old one. The
+// route additionally forbids a Chief from resetting an Admin (see
+// /api/account/reset-password); this is enforced server-side, not just hidden
+// in Settings.
+export function canResetStaffPassword(role: Role): boolean {
+  return role === "DIVISION_CHIEF" || role === "ADMIN";
+}
