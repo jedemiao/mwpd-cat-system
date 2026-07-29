@@ -68,7 +68,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
           <option value="EMERGENCY">Emergency</option>
           <option value="OTHER">Other</option>
         </select>
-        <button type="submit" className="btn-secondary">
+        <button type="submit" className="btn-dark">
           Filter
         </button>
       </form>
@@ -95,7 +95,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                 <tr key={leave.id}>
                   <td className="whitespace-nowrap">{leave.dateFiled?.toLocaleDateString() ?? "—"}</td>
                   <td className="whitespace-nowrap">{schedule}</td>
-                  <td>{leave.type}</td>
+                  <td>{leave.type === "OTHER" && leave.typeOther ? `Other — ${leave.typeOther}` : leave.type}</td>
                   <td>{leave.personnel.name}</td>
                   <td>
                     {leave.scannedCopyUrl ? (

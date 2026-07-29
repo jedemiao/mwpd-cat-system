@@ -10,6 +10,7 @@ const createSchema = z.object({
   leaveStart: z.string(), // ISO date string from the client
   leaveEnd: z.string().optional(),
   type: z.enum(["CTO", "VACATION", "SICK", "EMERGENCY", "OTHER"]).default("OTHER"),
+  typeOther: z.string().trim().min(1).optional(),
   personnelId: z.string(),
   scannedCopyUrl: z.string().optional(),
 });
@@ -66,6 +67,8 @@ export async function POST(req: NextRequest) {
   const leave = await prisma.leave.create({
     data: {
       ...rest,
+      // only keep the free-text specification when the type is actually "Other"
+      typeOther: rest.type === "OTHER" ? rest.typeOther : null,
       officeId: session.user.officeId,
       dateFiled: dateFiled ? new Date(dateFiled) : undefined,
       leaveStart: new Date(leaveStart),
