@@ -4,16 +4,25 @@ import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Pagination } from "@/components/Pagination";
-import { PrintLink } from "@/components/PrintLink";
+import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { ActivityCalendar } from "./ActivityCalendar";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_CATEGORY_DOT,
+  ACTIVITY_CATEGORY_LABELS,
+  activityCategoryLabel,
+  isActivityCategory,
+  type ActivityCategoryValue,
+} from "@/lib/activityCategories";
+import { leaveTypeLabel } from "@/lib/leaveTypes";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
 
-type SearchParams = { q?: string; page?: string; view?: string; month?: string; print?: string };
+type SearchParams = { q?: string; category?: string; page?: string; view?: string; month?: string; print?: string };
 
 // Server component: fetches directly via Prisma (no client-side fetch needed
 // for the initial render), scoped to the logged-in user's office.
@@ -23,15 +32,23 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
   const officeId = session!.user.officeId;
 
   const q = searchParams.q?.trim() ?? "";
+  const category = searchParams.category && isActivityCategory(searchParams.category) ? searchParams.category : "";
   const view = searchParams.view === "calendar" ? "calendar" : "list";
   const isPrint = searchParams.print === "1";
-  const extraQuery = q ? `&q=${encodeURIComponent(q)}` : "";
+  // Carried through every calendar month link, so paging from July to August
+  // doesn't silently drop the filter the clerk is looking at.
+  const extraQuery =
+    (q ? `&q=${encodeURIComponent(q)}` : "") + (category ? `&category=${encodeURIComponent(category)}` : "");
 
   const searchWhere: Prisma.ActivityWhereInput = q
     ? {
         OR: [
           { activityName: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { remarks: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { location: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          // The "Others" specification is the only place some activities say
+          // what they actually were, so it has to be searchable.
+          { categoryOther: { contains: q, mode: Prisma.QueryMode.insensitive } },
         ],
       }
     : {};
@@ -46,9 +63,12 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
   }
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
-  const where: Prisma.ActivityWhereInput = { officeId, ...searchWhere };
+  const where: Prisma.ActivityWhereInput = { officeId, ...searchWhere, ...(category ? { category } : {}) };
 
-  const [activities, total, office] = await Promise.all([
+  const monthStart = new Date(calendarYear, calendarMonth, 1);
+  const monthEnd = new Date(calendarYear, calendarMonth + 1, 1);
+
+  const [activities, total, office, leaves] = await Promise.all([
     view === "list"
       ? prisma.activity.findMany({
           where,
@@ -66,12 +86,9 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           where: {
             ...where,
             AND: [
-              { date: { lt: new Date(calendarYear, calendarMonth + 1, 1) } },
+              { date: { lt: monthEnd } },
               {
-                OR: [
-                  { endDate: null, date: { gte: new Date(calendarYear, calendarMonth, 1) } },
-                  { endDate: { gte: new Date(calendarYear, calendarMonth, 1) } },
-                ],
+                OR: [{ endDate: null, date: { gte: monthStart } }, { endDate: { gte: monthStart } }],
               },
             ],
           },
@@ -80,6 +97,28 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
         }),
     view === "list" ? prisma.activity.count({ where }) : Promise.resolve(0),
     isPrint ? prisma.office.findUnique({ where: { id: officeId }, select: { name: true } }) : Promise.resolve(null),
+    // Leave is projected onto the calendar, never stored as an activity — the
+    // Leave module stays the only place it can be filed. Same overlap test as
+    // the activity query above so a leave spanning a month boundary still
+    // shows. Skipped when a category filter is on: the clerk asked for one
+    // category, and leave is not one of them.
+    view === "calendar" && !category
+      ? prisma.leave.findMany({
+          where: {
+            officeId,
+            AND: [
+              { leaveStart: { lt: monthEnd } },
+              { OR: [{ leaveEnd: null, leaveStart: { gte: monthStart } }, { leaveEnd: { gte: monthStart } }] },
+            ],
+            // The search box reads as "show me what matches" — leaving every
+            // leave chip up during a search would bury the rows that matched.
+            // A leave's searchable text is whose it is.
+            ...(q ? { personnel: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } } : {}),
+          },
+          orderBy: { leaveStart: "asc" },
+          include: { personnel: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -92,7 +131,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
   const backHref =
     view === "calendar"
       ? `/activities?view=calendar&month=${monthParam}${extraQuery}`
-      : `/activities${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+      : listHref("/activities", { q, category });
   // The calendar renders one month whole, so its printout is that month, not a
   // row count — hence the different header title and total between the views.
   const printTotal = view === "calendar" ? activities.length : total;
@@ -115,6 +154,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                 basePath="/activities"
                 searchParams={{
                   q,
+                  category,
                   view: view === "calendar" ? "calendar" : undefined,
                   month: view === "calendar" ? monthParam : undefined,
                 }}
@@ -127,19 +167,42 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <form action="/activities" method="get" className="flex gap-2">
+            <form action="/activities" method="get" className="flex flex-wrap gap-2">
               {view === "calendar" && <input type="hidden" name="view" value="calendar" />}
+              {view === "calendar" && <input type="hidden" name="month" value={monthParam} />}
               <div className="relative w-72">
                 <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400 dark:text-white/30" />
-                <input type="text" name="q" defaultValue={q} placeholder="Search activity or remarks…" className="field-input pl-9" />
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={q}
+                  placeholder="Search activity, location or remarks…"
+                  className="field-input pl-9"
+                />
               </div>
+              <select name="category" defaultValue={category} className="field-input w-auto">
+                <option value="">All categories</option>
+                {ACTIVITY_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {ACTIVITY_CATEGORY_LABELS[value]}
+                  </option>
+                ))}
+              </select>
               <button type="submit" className="btn-dark">
                 Search
               </button>
+              {(q || category) && (
+                <Link
+                  href={view === "calendar" ? `/activities?view=calendar&month=${monthParam}` : "/activities"}
+                  className="btn-secondary"
+                >
+                  Clear
+                </Link>
+              )}
             </form>
 
             <div className="flex gap-2">
-              <Link href={`/activities${q ? `?q=${encodeURIComponent(q)}` : ""}`} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
+              <Link href={listHref("/activities", { q, category })} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
                 List
               </Link>
               <Link
@@ -157,7 +220,10 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
         <PrintHeader
           officeName={office?.name ?? ""}
           title={view === "calendar" ? `Activity calendar — ${monthLabel}` : "Monthly activity"}
-          filters={[{ label: "Search", value: q }]}
+          filters={[
+            { label: "Search", value: q },
+            { label: "Category", value: category ? ACTIVITY_CATEGORY_LABELS[category] : "" },
+          ]}
           total={printTotal}
           generatedBy={session!.user.name ?? "—"}
           truncatedAt={view === "list" ? PRINT_MAX : undefined}
@@ -174,7 +240,17 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             date: activity.date,
             endDate: activity.endDate,
             activityName: activity.activityName,
+            category: activity.category as ActivityCategoryValue,
+            categoryOther: activity.categoryOther,
+            location: activity.location,
             assignees: activity.assignees.map((a) => ({ id: a.userId, name: a.user.name })),
+          }))}
+          leaves={leaves.map((leave) => ({
+            id: leave.id,
+            personName: leave.personnel.name,
+            typeLabel: leaveTypeLabel(leave.type, leave.typeOther),
+            date: leave.leaveStart,
+            endDate: leave.leaveEnd,
           }))}
         />
       ) : (
@@ -185,6 +261,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                 <tr>
                   <th>Date</th>
                   <th>Activity</th>
+                  <th>Category</th>
                   <th>Person(s) incharge</th>
                   <th>Remarks</th>
                   <th>Supporting files</th>
@@ -206,7 +283,24 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                         {activity.date.toLocaleDateString()}
                         {activity.endDate && ` – ${activity.endDate.toLocaleDateString()}`}
                       </td>
-                      <td>{activity.activityName}</td>
+                      <td>
+                        {activity.activityName}
+                        {/* Location rides under the activity name rather than
+                            taking its own column — same treatment the incoming
+                            ledger gives the sending agency, and it keeps this
+                            table inside a printable width. */}
+                        {activity.location && (
+                          <div className="text-xs text-ink-500 dark:text-white/40">{activity.location}</div>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-sm print:hidden ${ACTIVITY_CATEGORY_DOT[activity.category as ActivityCategoryValue]}`}
+                          />
+                          {activityCategoryLabel(activity.category as ActivityCategoryValue, activity.categoryOther)}
+                        </span>
+                      </td>
                       <td>{names}</td>
                       <td>{activity.remarks ?? "—"}</td>
                       <td>
@@ -239,7 +333,9 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             </table>
           </div>
 
-          {!isPrint && <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q }} />}
+          {!isPrint && (
+            <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q, category }} />
+          )}
         </>
       )}
     </main>

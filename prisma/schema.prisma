@@ -34,6 +34,27 @@ enum DocumentOrigin {
   EXTERNAL // from outside — agencies, employers, walk-in clients, email
 }
 
+// The office's own vocabulary for what a day on the calendar is, taken from
+// the source tracker's "Legend" dropdown. One category per activity.
+//
+// Their legend has a tenth entry, "On Leave", which is deliberately NOT a
+// value here. They have no Leave module, so leave is filed as an activity with
+// Legend = On Leave and the person's name typed in free text. We have a real
+// Leave model, so leave is *projected* onto the calendar from that table at
+// render time. Leaving ON_LEAVE out of the enum means the API cannot accept it
+// either — the Leave module stays the only place a leave can be created, and
+// there is exactly one source of truth for who is out.
+enum ActivityCategory {
+  JOB_FAIR
+  PEOS // Pre-Employment Orientation Seminar
+  QUICK_RESPONSE_TEAM
+  CONFERENCE_TRAINING
+  MEETINGS
+  SKELETON_FORCE
+  PUBLIC_HOLIDAY
+  OTHERS
+}
+
 enum LeaveType {
   CTO
   VACATION
@@ -178,6 +199,16 @@ model Activity {
   date              DateTime // start date; single-day activities just use this
   endDate           DateTime? // set only for multi-day activities; must be >= date
   activityName      String
+  // Defaults to OTHERS so every pre-existing row stays valid without a
+  // backfill guess: "unclassified" is honest, a fabricated category is not.
+  category          ActivityCategory @default(OTHERS)
+  // Free-text specification, used only when category == OTHERS — same shape as
+  // Leave.typeOther. Optional rather than required (unlike leave's, where OTHER
+  // is a deliberate pick among five named types): OTHERS is this column's
+  // default and means "unclassified", so demanding text would tax every
+  // activity nobody bothered to categorise.
+  categoryOther     String?
+  location          String?   // where it happens — "Butuan City Hall"
   remarks           String?
   officeOrderUrl    String?
   memoUrl           String?

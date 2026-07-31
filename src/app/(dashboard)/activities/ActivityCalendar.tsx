@@ -1,39 +1,63 @@
 import Link from "next/link";
 import { PlusIcon } from "@/components/icons";
+import {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_CATEGORY_CHIP,
+  ACTIVITY_CATEGORY_DOT,
+  ACTIVITY_CATEGORY_LABELS,
+  activityCategoryLabel,
+  LEAVE_CHIP,
+  LEAVE_DOT,
+  LEAVE_LEGEND_LABEL,
+  type ActivityCategoryValue,
+} from "@/lib/activityCategories";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-// Cycled by assignee id so the same person always lands on the same color
-// across days/months — a lightweight way to make "who's busy when" scannable
-// without a legend. Colors reuse the app's existing semantic palette rather
-// than introducing new ones.
-const PILL_PALETTE = [
-  "border-l-primary bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary/15 dark:text-primary-100 dark:hover:bg-primary/25",
-  "border-l-success bg-success-50 text-success-600 hover:bg-success-50/70 dark:bg-success/15 dark:text-success dark:hover:bg-success/25",
-  "border-l-warning bg-warning-50 text-[#92660c] hover:bg-warning-50/70 dark:bg-warning/15 dark:text-warning dark:hover:bg-warning/25",
-  "border-l-info bg-info-50 text-info-600 hover:bg-info-50/70 dark:bg-info/15 dark:text-info dark:hover:bg-info/25",
-  "border-l-secondary bg-secondary-50 text-secondary-600 hover:bg-secondary-50/70 dark:bg-white/10 dark:text-white/70 dark:hover:bg-white/15",
-];
-const UNASSIGNED_PILL =
-  "border-l-ink-400/40 bg-surface text-ink-600 hover:bg-ink-400/10 dark:border-l-white/20 dark:bg-white/[0.04] dark:text-white/60 dark:hover:bg-white/[0.08]";
-
-function pillClassFor(assigneeIds: string[]) {
-  if (assigneeIds.length === 0) return UNASSIGNED_PILL;
-  let hash = 0;
-  for (const ch of assigneeIds[0]) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return PILL_PALETTE[hash % PILL_PALETTE.length];
-}
 
 type CalendarActivity = {
   id: string;
   date: Date;
   endDate: Date | null;
   activityName: string;
+  category: ActivityCategoryValue;
+  categoryOther: string | null;
+  location: string | null;
   assignees: { id: string; name: string }[];
+};
+
+// Projected from the Leave table, never from Activity. These are read-only on
+// the calendar: the Leave module is the only place one can be filed or edited,
+// so a chip here links to the record rather than offering to create anything.
+type CalendarLeave = {
+  id: string;
+  personName: string;
+  typeLabel: string;
+  date: Date;
+  endDate: Date | null;
 };
 
 function dateKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Walks [start, end] a day at a time and drops the entry into every bucket it
+// spans, so a multi-day activity or leave gets a chip on each of its days
+// rather than only the first.
+function bucketByDay<T extends { date: Date; endDate: Date | null }>(entries: T[]) {
+  const byDay = new Map<string, T[]>();
+  for (const entry of entries) {
+    const last = entry.endDate ?? entry.date;
+    for (
+      let d = new Date(entry.date.getFullYear(), entry.date.getMonth(), entry.date.getDate());
+      d <= last;
+      d.setDate(d.getDate() + 1)
+    ) {
+      const key = dateKey(d);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push(entry);
+    }
+  }
+  return byDay;
 }
 
 // Builds a fixed 6-week grid (42 days) starting on the Sunday on/before the
@@ -52,35 +76,29 @@ function buildWeeks(year: number, month: number) {
   return weeks;
 }
 
+function dateRangeLabel(start: Date, end: Date | null) {
+  return end ? ` (${start.toLocaleDateString()} – ${end.toLocaleDateString()})` : "";
+}
+
 export function ActivityCalendar({
   year,
   month,
   activities,
+  leaves,
   extraQuery,
 }: {
   year: number;
   month: number; // 0-indexed
   activities: CalendarActivity[];
+  leaves: CalendarLeave[]; // empty when a category filter is narrowing the grid
   extraQuery: string; // query string fragment to preserve (e.g. "&q=inspection"), "" if none
 }) {
   const weeks = buildWeeks(year, month);
   const today = new Date();
   const todayKey = dateKey(today);
 
-  const byDay = new Map<string, CalendarActivity[]>();
-  for (const activity of activities) {
-    // Multi-day activities get a pill on every day they span, not just the start.
-    const last = activity.endDate ?? activity.date;
-    for (
-      let d = new Date(activity.date.getFullYear(), activity.date.getMonth(), activity.date.getDate());
-      d <= last;
-      d.setDate(d.getDate() + 1)
-    ) {
-      const key = dateKey(d);
-      if (!byDay.has(key)) byDay.set(key, []);
-      byDay.get(key)!.push(activity);
-    }
-  }
+  const activitiesByDay = bucketByDay(activities);
+  const leavesByDay = bucketByDay(leaves);
 
   const prev = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
   const next = month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 };
@@ -114,6 +132,27 @@ export function ActivityCalendar({
         </div>
       </div>
 
+      {/* The legend is the key to the category vocabulary, so it lists all nine
+          entries regardless of what this particular month happens to contain.
+          Hidden in print: the printed grid loses chip colour entirely (see the
+          globals.css print block), and prints the category as text on each chip
+          instead, which makes a colour key on paper actively misleading. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 print:hidden">
+        {ACTIVITY_CATEGORIES.map((category) => (
+          <span key={category} className="inline-flex items-center gap-1.5 text-xs text-ink-600 dark:text-white/60">
+            <span className={`h-2.5 w-2.5 rounded-sm ${ACTIVITY_CATEGORY_DOT[category]}`} />
+            {ACTIVITY_CATEGORY_LABELS[category]}
+          </span>
+        ))}
+        <span
+          title="Filed in the Leave module and shown here — leave can't be created from the calendar"
+          className="inline-flex items-center gap-1.5 text-xs text-ink-600 dark:text-white/60"
+        >
+          <span className={`h-2.5 w-2.5 rounded-sm ${LEAVE_DOT}`} />
+          {LEAVE_LEGEND_LABEL}
+        </span>
+      </div>
+
       {/* calendar-grid is the hook for the print rules in globals.css. Colour
           can't be handled with Tailwind `print:` utilities here: `dark:`
           variants compile to a descendant selector (.dark .foo) and so outrank
@@ -138,7 +177,8 @@ export function ActivityCalendar({
         {weeks.flat().map((day) => {
           const inMonth = day.getMonth() === month;
           const key = dateKey(day);
-          const dayActivities = byDay.get(key) ?? [];
+          const dayActivities = activitiesByDay.get(key) ?? [];
+          const dayLeaves = leavesByDay.get(key) ?? [];
           const isToday = key === todayKey;
           const isWeekend = day.getDay() === 0 || day.getDay() === 6;
           const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
@@ -174,20 +214,38 @@ export function ActivityCalendar({
               </div>
               <div className="space-y-1">
                 {dayActivities.map((activity) => {
-                  const range = activity.endDate
-                    ? ` (${activity.date.toLocaleDateString()} – ${activity.endDate.toLocaleDateString()})`
-                    : "";
+                  const categoryLabel = activityCategoryLabel(activity.category, activity.categoryOther);
+                  const where = activity.location ? ` @ ${activity.location}` : "";
+                  const who = activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : "";
                   return (
                     <Link
                       key={activity.id}
                       href={`/activities/${activity.id}`}
-                      title={`${activity.activityName}${range}${activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : ""}`}
-                      className={`calendar-pill block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${pillClassFor(activity.assignees.map((a) => a.id))}`}
+                      title={`${categoryLabel}: ${activity.activityName}${where}${dateRangeLabel(activity.date, activity.endDate)}${who}`}
+                      className={`calendar-pill block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${ACTIVITY_CATEGORY_CHIP[activity.category]}`}
                     >
+                      {/* On paper the chip has no colour, so the category it
+                          encodes on screen has to become words. */}
+                      <span className="hidden print:inline">{categoryLabel} — </span>
                       {activity.activityName}
                     </Link>
                   );
                 })}
+
+                {dayLeaves.map((leave) => (
+                  <Link
+                    key={leave.id}
+                    href={`/leave/${leave.id}`}
+                    title={`${LEAVE_LEGEND_LABEL} (${leave.typeLabel}): ${leave.personName}${dateRangeLabel(leave.date, leave.endDate)}`}
+                    className={`calendar-pill block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${LEAVE_CHIP}`}
+                  >
+                    {/* Leave chips carry the person's name — the activity name
+                        is what identifies an activity, but for an absence the
+                        useful fact is who is out. */}
+                    <span className="hidden print:inline">{LEAVE_LEGEND_LABEL} — </span>
+                    {leave.personName}
+                  </Link>
+                ))}
               </div>
             </div>
           );

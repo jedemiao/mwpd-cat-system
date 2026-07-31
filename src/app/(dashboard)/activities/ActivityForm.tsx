@@ -3,6 +3,12 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUploadField } from "@/components/FileUploadField";
+import {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_CATEGORY_DESCRIPTIONS,
+  ACTIVITY_CATEGORY_LABELS,
+  type ActivityCategoryValue,
+} from "@/lib/activityCategories";
 
 type Option = { id: string; name: string };
 
@@ -15,6 +21,9 @@ type ActivityFormProps = {
     date?: string;
     endDate?: string;
     activityName?: string;
+    category?: ActivityCategoryValue;
+    categoryOther?: string;
+    location?: string;
     remarks?: string;
     officeOrderUrl?: string;
     memoUrl?: string;
@@ -31,6 +40,9 @@ export function ActivityForm({ mode, id, users, redirectTo, initialData }: Activ
   const [date, setDate] = useState(initialData?.date ?? "");
   const [endDate, setEndDate] = useState(initialData?.endDate ?? "");
   const [activityName, setActivityName] = useState(initialData?.activityName ?? "");
+  const [category, setCategory] = useState<ActivityCategoryValue>(initialData?.category ?? "OTHERS");
+  const [categoryOther, setCategoryOther] = useState(initialData?.categoryOther ?? "");
+  const [location, setLocation] = useState(initialData?.location ?? "");
   const [remarks, setRemarks] = useState(initialData?.remarks ?? "");
   const [officeOrderUrl, setOfficeOrderUrl] = useState(initialData?.officeOrderUrl ?? "");
   const [memoUrl, setMemoUrl] = useState(initialData?.memoUrl ?? "");
@@ -59,10 +71,17 @@ export function ActivityForm({ mode, id, users, redirectTo, initialData }: Activ
 
     setLoading(true);
 
+    const otherDetail = category === "OTHERS" ? categoryOther.trim() : "";
+
     const body = {
       date,
       endDate: endDate || (mode === "create" ? undefined : null),
       activityName,
+      category,
+      // Only meaningful under OTHERS; sending it otherwise would be silently
+      // dropped by the route anyway, which clears the column off-category.
+      categoryOther: otherDetail || (mode === "create" ? undefined : null),
+      location: location || (mode === "create" ? undefined : null),
       remarks: remarks || (mode === "create" ? undefined : null),
       officeOrderUrl: officeOrderUrl || (mode === "create" ? undefined : null),
       memoUrl: memoUrl || (mode === "create" ? undefined : null),
@@ -127,6 +146,72 @@ export function ActivityForm({ mode, id, users, redirectTo, initialData }: Activ
           className={inputClass}
         />
       </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass} htmlFor="category">
+            Category
+          </label>
+          <select
+            id="category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value as ActivityCategoryValue)}
+            className={inputClass}
+          >
+            {ACTIVITY_CATEGORIES.map((value) => {
+              const description = ACTIVITY_CATEGORY_DESCRIPTIONS[value];
+              return (
+                <option key={value} value={value}>
+                  {ACTIVITY_CATEGORY_LABELS[value]}
+                  {description ? ` — ${description}` : ""}
+                </option>
+              );
+            })}
+          </select>
+          {/* On Leave is absent on purpose: leave is filed in the Leave module
+              and drawn onto the calendar from there. */}
+          <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+            For leave, file it under <a href="/leave" className="text-info hover:underline">Leave</a> — it appears on the
+            calendar automatically.
+          </p>
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="location">
+            Location
+          </label>
+          <input
+            id="location"
+            type="text"
+            placeholder="Butuan City Hall"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      {/* Same shape as LeaveForm's "Please specify", but optional rather than
+          required: OTHERS is the default category and means "unclassified", so
+          demanding a specification would tax every activity nobody classified. */}
+      {category === "OTHERS" && (
+        <div>
+          <label className={labelClass} htmlFor="categoryOther">
+            Please specify
+          </label>
+          <input
+            id="categoryOther"
+            type="text"
+            maxLength={100}
+            placeholder="e.g. Team building, Courtesy call, Ocular inspection…"
+            value={categoryOther}
+            onChange={(e) => setCategoryOther(e.target.value)}
+            className={inputClass}
+          />
+          <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+            Optional. Leave blank if the activity doesn&apos;t need one.
+          </p>
+        </div>
+      )}
 
       <div>
         <span className={labelClass}>Person(s) incharge</span>

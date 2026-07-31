@@ -3,12 +3,17 @@ import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { canDelete } from "@/lib/authz";
+import { ACTIVITY_CATEGORIES } from "@/lib/activityCategories";
 import { z } from "zod";
 
 const updateSchema = z.object({
   date: z.string().optional(),
   endDate: z.string().nullable().optional(),
   activityName: z.string().optional(),
+  // See the note in the create route: ON_LEAVE is deliberately not accepted.
+  category: z.enum(ACTIVITY_CATEGORIES).optional(),
+  categoryOther: z.string().trim().min(1).nullable().optional(), // only kept when category is OTHERS
+  location: z.string().nullable().optional(),
   remarks: z.string().nullable().optional(),
   officeOrderUrl: z.string().nullable().optional(),
   memoUrl: z.string().nullable().optional(),
@@ -65,6 +70,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       where: { id: existing.id },
       data: {
         ...rest,
+        // Mirrors the leave routes: clear the free-text specification whenever
+        // the effective category (after this update) isn't OTHERS, so switching
+        // away from Others can't strand its text on the record.
+        categoryOther: (rest.category ?? existing.category) === "OTHERS" ? rest.categoryOther : null,
         date: date ? nextDate : undefined,
         endDate: endDate === undefined ? undefined : nextEndDate,
         ...(assigneeIds ? { assignees: { create: assigneeIds.map((userId) => ({ userId })) } } : {}),

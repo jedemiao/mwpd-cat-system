@@ -1,0 +1,7 @@
+-- CreateEnum
+CREATE TYPE "ActivityCategory" AS ENUM ('JOB_FAIR', 'PEOS', 'QUICK_RESPONSE_TEAM', 'CONFERENCE_TRAINING', 'MEETINGS', 'SKELETON_FORCE', 'PUBLIC_HOLIDAY', 'OTHERS');
+
+-- AlterTable
+ALTER TABLE "Activity" ADD COLUMN     "category" "ActivityCategory" NOT NULL DEFAULT 'OTHERS',
+ADD COLUMN     "location" TEXT;
+

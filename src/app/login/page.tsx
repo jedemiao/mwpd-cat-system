@@ -58,7 +58,11 @@ function LoginForm() {
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-ink-400/15 bg-white dark:border-white/10">
             <Image src="/dmw_logo.png" alt="DMW logo" width={48} height={48} priority className="h-10 w-10" />
           </span>
-          <p className="font-display text-base font-bold text-ink-900 dark:text-white">MWPtD Tracker</p>
+          <p className="font-display text-base font-bold leading-tight text-ink-900 dark:text-white">
+            DMW Regional
+            <br />
+            Office XIII
+          </p>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -169,20 +173,25 @@ export default function LoginPage() {
             priority
             className="h-10 w-10 shrink-0 rounded-full bg-white"
           />
+          {/* Just the department here — the regional office is the headline
+              below, and repeating it in both places reads as a mistake. */}
           <p className="text-[12px] uppercase leading-tight tracking-[0.04em] text-white/90">
             <span className="whitespace-nowrap">Department of Migrant Workers</span>
-            <br />
-            <span className="whitespace-nowrap">— Regional Office XIII (CARAGA)</span>
           </p>
         </div>
 
         <div>
-          <h1 className="max-w-[9ch] font-display text-5xl font-extrabold leading-[1.05] text-white xl:text-6xl">
-            MWPtD Tracker
+          {/* Named for the regional office, not a division: all four divisions
+              share this one instance, so nobody has signed in yet at this point
+              and there is no office to personalise the page with. Sized a step
+              down from the old two-word name — this one is 24 characters and
+              would otherwise overflow the panel at the narrow end of lg. */}
+          <h1 className="max-w-[12ch] font-display text-4xl font-extrabold leading-[1.05] text-white xl:text-5xl">
+            DMW Regional Office XIII
           </h1>
           <div className="my-5 h-0.5 w-16 bg-white/40" />
           <p className="max-w-[34ch] text-white/85">
-            Migrant Workers Protection Division — Communication and Activity tracker.
+            Caraga — communication and activity records tracker.
           </p>
         </div>
 

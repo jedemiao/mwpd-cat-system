@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
+import { ACTIVITY_CATEGORIES } from "@/lib/activityCategories";
 import { z } from "zod";
 
 const createSchema = z.object({
   date: z.string(), // ISO date string from the client — start date
   endDate: z.string().optional(), // set only for multi-day activities; must be >= date
   activityName: z.string(),
+  // ON_LEAVE is not one of these values and must never become one: leave lives
+  // in the Leave table and is only projected onto the calendar.
+  category: z.enum(ACTIVITY_CATEGORIES).optional(),
+  categoryOther: z.string().trim().min(1).optional(), // only kept when category is OTHERS
+  location: z.string().optional(),
   remarks: z.string().optional(),
   officeOrderUrl: z.string().optional(),
   memoUrl: z.string().optional(),
@@ -63,6 +69,9 @@ export async function POST(req: NextRequest) {
   const activity = await prisma.activity.create({
     data: {
       ...rest,
+      // The specification belongs to OTHERS alone — a category change must not
+      // leave a stale "Team building" hanging off a Job Fair.
+      categoryOther: (rest.category ?? "OTHERS") === "OTHERS" ? rest.categoryOther : null,
       officeId: session.user.officeId,
       date: startDate,
       endDate: parsedEndDate,

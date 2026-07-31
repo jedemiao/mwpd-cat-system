@@ -8,17 +8,10 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon } from "@/components/icons";
+import { LEAVE_TYPE_LABELS, leaveTypeLabel } from "@/lib/leaveTypes";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
-
-const TYPE_LABELS: Record<string, string> = {
-  CTO: "CTO",
-  VACATION: "Vacation",
-  SICK: "Sick",
-  EMERGENCY: "Emergency",
-  OTHER: "Other",
-};
 
 type SearchParams = { personnelId?: string; type?: string; page?: string; print?: string };
 
@@ -86,7 +79,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
           title="Leave records"
           filters={[
             { label: "Personnel", value: personnelName },
-            { label: "Type", value: TYPE_LABELS[type] ?? "" },
+            { label: "Type", value: LEAVE_TYPE_LABELS[type] ?? "" },
           ]}
           total={total}
           generatedBy={session!.user.name ?? "—"}
@@ -140,7 +133,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                 <tr key={leave.id}>
                   <td className="whitespace-nowrap">{leave.dateFiled?.toLocaleDateString() ?? "—"}</td>
                   <td className="whitespace-nowrap">{schedule}</td>
-                  <td>{leave.type === "OTHER" && leave.typeOther ? `Other — ${leave.typeOther}` : leave.type}</td>
+                  <td>{leaveTypeLabel(leave.type, leave.typeOther)}</td>
                   <td>{leave.personnel.name}</td>
                   <td>
                     {isPrint ? (
