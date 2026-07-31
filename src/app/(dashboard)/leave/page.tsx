@@ -4,11 +4,23 @@ import { Prisma, LeaveType } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Pagination } from "@/components/Pagination";
+import { PrintLink, listHref } from "@/components/PrintLink";
+import { PrintToolbar } from "@/components/PrintToolbar";
+import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon } from "@/components/icons";
 
 const PAGE_SIZE = 20;
+const PRINT_MAX = 2000;
 
-type SearchParams = { personnelId?: string; type?: string; page?: string };
+const TYPE_LABELS: Record<string, string> = {
+  CTO: "CTO",
+  VACATION: "Vacation",
+  SICK: "Sick",
+  EMERGENCY: "Emergency",
+  OTHER: "Other",
+};
+
+type SearchParams = { personnelId?: string; type?: string; page?: string; print?: string };
 
 // Server component: fetches directly via Prisma (no client-side fetch needed
 // for the initial render), scoped to the logged-in user's office.
@@ -20,6 +32,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
   const personnelId = searchParams.personnelId ?? "";
   const type = searchParams.type ?? "";
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
+  const isPrint = searchParams.print === "1";
 
   const where: Prisma.LeaveWhereInput = {
     officeId,
@@ -27,51 +40,83 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
     ...(type ? { type: type as LeaveType } : {}),
   };
 
-  const [leaves, total, users] = await Promise.all([
+  const [leaves, total, users, office] = await Promise.all([
     prisma.leave.findMany({
       where,
       orderBy: { leaveStart: "desc" },
       include: { personnel: { select: { name: true } } },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
+      take: isPrint ? PRINT_MAX : PAGE_SIZE,
     }),
     prisma.leave.count({ where }),
     prisma.user.findMany({ where: { officeId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    isPrint ? prisma.office.findUnique({ where: { id: officeId }, select: { name: true } }) : Promise.resolve(null),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const backHref = listHref("/leave", { personnelId, type });
+  // The URL carries a personnel id; the printed header has to name the person.
+  const personnelName = personnelId ? (users.find((u) => u.id === personnelId)?.name ?? "") : "";
 
   return (
     <main className="space-y-4 p-6 lg:p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Leave</h1>
-        <Link href="/leave/new" className="btn-primary">
-          <PlusIcon className="h-4 w-4" />
-          New
-        </Link>
-      </div>
+      {isPrint ? (
+        <div className="flex items-center justify-between print:hidden">
+          <h1 className="text-xl font-semibold text-ink-900 dark:text-white">
+            Leave <span className="text-ink-400 dark:text-white/30">· print preview</span>
+          </h1>
+          <PrintToolbar backHref={backHref} />
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Leave</h1>
+          <div className="flex gap-2">
+            <PrintLink basePath="/leave" searchParams={{ personnelId, type }} />
+            <Link href="/leave/new" className="btn-primary">
+              <PlusIcon className="h-4 w-4" />
+              New
+            </Link>
+          </div>
+        </div>
+      )}
 
-      <form action="/leave" method="get" className="flex gap-2">
-        <select name="personnelId" defaultValue={personnelId} className="field-input w-auto">
-          <option value="">All personnel</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
-        <select name="type" defaultValue={type} className="field-input w-auto">
-          <option value="">All types</option>
-          <option value="CTO">CTO</option>
-          <option value="VACATION">Vacation</option>
-          <option value="SICK">Sick</option>
-          <option value="EMERGENCY">Emergency</option>
-          <option value="OTHER">Other</option>
-        </select>
-        <button type="submit" className="btn-dark">
-          Filter
-        </button>
-      </form>
+      {isPrint && (
+        <PrintHeader
+          officeName={office?.name ?? ""}
+          title="Leave records"
+          filters={[
+            { label: "Personnel", value: personnelName },
+            { label: "Type", value: TYPE_LABELS[type] ?? "" },
+          ]}
+          total={total}
+          generatedBy={session!.user.name ?? "—"}
+          truncatedAt={PRINT_MAX}
+        />
+      )}
+
+      {!isPrint && (
+        <form action="/leave" method="get" className="flex gap-2">
+          <select name="personnelId" defaultValue={personnelId} className="field-input w-auto">
+            <option value="">All personnel</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          <select name="type" defaultValue={type} className="field-input w-auto">
+            <option value="">All types</option>
+            <option value="CTO">CTO</option>
+            <option value="VACATION">Vacation</option>
+            <option value="SICK">Sick</option>
+            <option value="EMERGENCY">Emergency</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <button type="submit" className="btn-dark">
+            Filter
+          </button>
+        </form>
+      )}
 
       <div className="card overflow-x-auto">
         <table className="data-table">
@@ -82,7 +127,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
               <th>Type</th>
               <th>Personnel</th>
               <th>Scanned copy</th>
-              <th></th>
+              <th className="print:hidden"></th>
             </tr>
           </thead>
           <tbody>
@@ -98,7 +143,13 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                   <td>{leave.type === "OTHER" && leave.typeOther ? `Other — ${leave.typeOther}` : leave.type}</td>
                   <td>{leave.personnel.name}</td>
                   <td>
-                    {leave.scannedCopyUrl ? (
+                    {isPrint ? (
+                      leave.scannedCopyUrl ? (
+                        "Yes"
+                      ) : (
+                        "—"
+                      )
+                    ) : leave.scannedCopyUrl ? (
                       <a href={`/api/files/${leave.scannedCopyUrl}`} target="_blank" rel="noreferrer" className="text-info hover:underline">
                         View
                       </a>
@@ -106,7 +157,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                       "—"
                     )}
                   </td>
-                  <td>
+                  <td className="print:hidden">
                     <Link href={`/leave/${leave.id}`} className="font-medium text-primary hover:text-primary-600">
                       Edit
                     </Link>
@@ -118,7 +169,9 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
         </table>
       </div>
 
-      <Pagination basePath="/leave" page={page} totalPages={totalPages} total={total} searchParams={{ personnelId, type }} />
+      {!isPrint && (
+        <Pagination basePath="/leave" page={page} totalPages={totalPages} total={total} searchParams={{ personnelId, type }} />
+      )}
     </main>
   );
 }

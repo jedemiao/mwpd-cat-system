@@ -49,7 +49,7 @@ export function Topbar({
   const crumbs = breadcrumbFor(pathname);
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-ink-400/15 bg-white px-6 font-display dark:border-white/10 dark:bg-dock">
+    <header className="flex h-16 items-center justify-between border-b border-ink-400/15 bg-white px-6 font-display dark:border-white/10 dark:bg-dock print:hidden">
       <nav className="flex items-center gap-1.5 text-sm text-ink-500 dark:text-white/40">
         <Link href="/" className="hover:text-ink-900 dark:hover:text-white">
           Home

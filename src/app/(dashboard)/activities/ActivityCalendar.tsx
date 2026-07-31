@@ -95,7 +95,7 @@ export function ActivityCalendar({
         <h2 className="text-sm font-semibold text-ink-900 dark:text-white">
           {new Date(year, month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 print:hidden">
           <Link
             href={`/activities?view=calendar&month=${monthParam(prev.year, prev.month)}${extraQuery}`}
             className="btn-secondary btn-sm"
@@ -114,7 +114,11 @@ export function ActivityCalendar({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-ink-400/15 bg-ink-400/15 dark:border-white/10 dark:bg-white/10">
+      {/* calendar-grid is the hook for the print rules in globals.css. Colour
+          can't be handled with Tailwind `print:` utilities here: `dark:`
+          variants compile to a descendant selector (.dark .foo) and so outrank
+          a plain `print:` class, which would print the dark theme verbatim. */}
+      <div className="calendar-grid grid grid-cols-7 gap-px overflow-hidden rounded-md border border-ink-400/15 bg-ink-400/15 dark:border-white/10 dark:bg-white/10">
         {WEEKDAY_LABELS.map((label, i) => {
           const isWeekend = i === 0 || i === 6;
           return (
@@ -162,7 +166,7 @@ export function ActivityCalendar({
                   <Link
                     href={`/activities/new?date=${dateStr}&returnTo=${returnTo}`}
                     title="New activity on this day"
-                    className="rounded p-0.5 text-ink-400/50 hover:bg-primary-100 hover:text-primary-700 dark:text-white/20 dark:hover:bg-primary/20 dark:hover:text-primary-100"
+                    className="rounded p-0.5 text-ink-400/50 hover:bg-primary-100 hover:text-primary-700 dark:text-white/20 dark:hover:bg-primary/20 dark:hover:text-primary-100 print:hidden"
                   >
                     <PlusIcon className="h-3.5 w-3.5" />
                   </Link>
@@ -178,7 +182,7 @@ export function ActivityCalendar({
                       key={activity.id}
                       href={`/activities/${activity.id}`}
                       title={`${activity.activityName}${range}${activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : ""}`}
-                      className={`block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${pillClassFor(activity.assignees.map((a) => a.id))}`}
+                      className={`calendar-pill block truncate rounded-sm border-l-2 pl-1.5 pr-1 py-0.5 text-xs ${pillClassFor(activity.assignees.map((a) => a.id))}`}
                     >
                       {activity.activityName}
                     </Link>
