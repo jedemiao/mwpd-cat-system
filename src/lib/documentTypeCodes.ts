@@ -20,9 +20,17 @@ export const DOCUMENT_TYPE_CODES = [
   { code: "TEV", label: "Travel Expense Voucher" },
   { code: "M", label: "Memorandum" },
   { code: "MA", label: "Mail" },
+  // Both observed in the source tracker's live ledgers (e.g. 073026-MO-005,
+  // MOM-06-2026) but missing from the original legend.
+  { code: "MO", label: "Memorandum Order" },
+  { code: "MOM", label: "Minutes of Meeting" },
 ] as const;
 
 export type DocumentTypeCode = (typeof DOCUMENT_TYPE_CODES)[number]["code"];
+
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  DOCUMENT_TYPE_CODES.map((t) => [t.code, t.label]),
+);
 
 export const DOCUMENT_TYPE_CODE_VALUES = DOCUMENT_TYPE_CODES.map((t) => t.code) as [DocumentTypeCode, ...DocumentTypeCode[]];
 

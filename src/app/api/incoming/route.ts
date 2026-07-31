@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { computeDueDate } from "@/lib/artaLeadTime";
 import { logAudit, getClientIp } from "@/lib/auditLog";
@@ -13,10 +12,24 @@ import { z } from "zod";
 // routing number, title) is left open to whoever is creating the record.
 const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity"] as const;
 
+// "HH:MM", 24-hour — what <input type="time"> submits.
+const timeString = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM")
+  .optional()
+  .or(z.literal(""));
+
 const createSchema = z.object({
   dateReceived: z.string(), // ISO date string from the client
+  timeReceived: timeString,
   documentType: z.enum(DOCUMENT_TYPE_CODE_VALUES),
   documentTitle: z.string(),
+  origin: z.enum(["INTERNAL", "EXTERNAL"]).default("EXTERNAL"),
+  receivedById: z.string().optional().or(z.literal("")),
+  originAgency: z.string().optional(),
+  signatory: z.string().optional(),
+  notes: z.string().optional(),
+  activityIds: z.array(z.string()).optional(),
   routedToIds: z.array(z.string()).optional(),
   instructions: z.string().optional(),
   complexity: z.enum(["SIMPLE", "COMPLEX", "HIGHLY_TECHNICAL"]).default("SIMPLE"),
@@ -24,7 +37,7 @@ const createSchema = z.object({
 
 // GET /api/incoming — list documents for the logged-in user's office, newest first
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -40,7 +53,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/incoming — create a new intake record, due date computed server-side
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -76,8 +89,36 @@ export async function POST(req: NextRequest) {
     routedToIds = chiefs.map((c) => c.id);
   }
 
-  const { dateReceived, documentType, complexity, routedToIds: _routedToIds, ...rest } = parsed.data;
+  // Intake references must belong to this office — never trust an id from the
+  // client to point somewhere the caller can see.
+  const { receivedById, activityIds } = parsed.data;
+  if (receivedById) {
+    const ok = await prisma.user.count({ where: { id: receivedById, officeId: session.user.officeId } });
+    if (ok !== 1) return NextResponse.json({ error: "Invalid receivedById" }, { status: 400 });
+  }
+  const linkedActivityIds = [...new Set(activityIds ?? [])];
+  if (linkedActivityIds.length > 0) {
+    const ok = await prisma.activity.count({
+      where: { id: { in: linkedActivityIds }, officeId: session.user.officeId },
+    });
+    if (ok !== linkedActivityIds.length) {
+      return NextResponse.json({ error: "Invalid activityIds" }, { status: 400 });
+    }
+  }
+
+  const {
+    dateReceived,
+    documentType,
+    complexity,
+    routedToIds: _routedToIds,
+    activityIds: _activityIds,
+    receivedById: _receivedById,
+    timeReceived,
+    ...rest
+  } = parsed.data;
   const receivedDate = new Date(dateReceived);
+  // NOTE: timeReceived is stored but deliberately not fed into computeDueDate —
+  // the office's cutoff rule is undecided. See docs/PHP-TRACKER-ADOPTION.md.
   const dueDate = computeDueDate(receivedDate, complexity);
 
   const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
@@ -96,11 +137,17 @@ export async function POST(req: NextRequest) {
         ...rest,
         officeId: session.user.officeId,
         routingNumber: buildRoutingNumber(receivedDate, documentType, office.incomingSeqCounter),
+        // Stored as well as embedded in the routing number, so the ledger can
+        // be filtered by type without parsing the number back apart.
+        documentType,
         dateReceived: receivedDate,
+        timeReceived: timeReceived || null,
+        receivedById: receivedById || null,
         complexity,
         leadTimeDays: leadDaysMap[complexity],
         dueDate,
         routedTo: { create: routedToIds.map((userId) => ({ userId })) },
+        linkedActivities: { create: linkedActivityIds.map((activityId) => ({ activityId })) },
       },
     });
   });

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { computeDueDate } from "@/lib/artaLeadTime";
 import { logAudit, getClientIp } from "@/lib/auditLog";
@@ -10,8 +9,21 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   dateReceived: z.string().optional(),
+  timeReceived: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM")
+    .nullable()
+    .optional()
+    .or(z.literal("")),
   routingNumber: z.string().optional(),
+  documentType: z.string().nullable().optional(),
   documentTitle: z.string().optional(),
+  origin: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
+  receivedById: z.string().nullable().optional().or(z.literal("")),
+  originAgency: z.string().nullable().optional(),
+  signatory: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  activityIds: z.array(z.string()).optional(),
   routedToIds: z.array(z.string()).optional(),
   instructions: z.string().nullable().optional(),
   complexity: z.enum(["SIMPLE", "COMPLEX", "HIGHLY_TECHNICAL"]).optional(),
@@ -35,7 +47,7 @@ const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "numCorr
 // (or an Admin) may edit the DC column fields, including dcSignOffDate.
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -68,7 +80,35 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     }
   }
 
-  const { dateReceived, dateCompleted, dcSignOffDate, complexity, routedToIds: _routedToIds, ...rest } = parsed.data;
+  // Same office-scoping rule as the create route: ids from the client must
+  // point at rows this office can actually see.
+  if (parsed.data.receivedById) {
+    const ok = await prisma.user.count({
+      where: { id: parsed.data.receivedById, officeId: session.user.officeId },
+    });
+    if (ok !== 1) return NextResponse.json({ error: "Invalid receivedById" }, { status: 400 });
+  }
+  const activityIds = parsed.data.activityIds ? [...new Set(parsed.data.activityIds)] : undefined;
+  if (activityIds && activityIds.length > 0) {
+    const ok = await prisma.activity.count({
+      where: { id: { in: activityIds }, officeId: session.user.officeId },
+    });
+    if (ok !== activityIds.length) {
+      return NextResponse.json({ error: "Invalid activityIds" }, { status: 400 });
+    }
+  }
+
+  const {
+    dateReceived,
+    timeReceived,
+    receivedById,
+    dateCompleted,
+    dcSignOffDate,
+    complexity,
+    routedToIds: _routedToIds,
+    activityIds: _activityIds,
+    ...rest
+  } = parsed.data;
 
   const nextDateReceived = dateReceived ? new Date(dateReceived) : existing.dateReceived;
   const nextComplexity = complexity ?? existing.complexity;
@@ -78,18 +118,28 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (routedToIds) {
       await tx.incomingRoutedStaff.deleteMany({ where: { incomingId: existing.id } });
     }
+    // Replace the whole link set rather than diffing it — the form always
+    // submits the complete selection, and an empty array must be able to mean
+    // "unlink everything".
+    if (activityIds) {
+      await tx.incomingDocumentActivity.deleteMany({ where: { incomingId: existing.id } });
+    }
 
     return tx.incomingDocument.update({
       where: { id: existing.id },
       data: {
         ...rest,
         dateReceived: nextDateReceived,
+        // "" from a cleared input means null, but an absent key means "leave alone".
+        timeReceived: timeReceived === undefined ? undefined : timeReceived || null,
+        receivedById: receivedById === undefined ? undefined : receivedById || null,
         complexity: nextComplexity,
         leadTimeDays: leadDaysMap[nextComplexity],
         dueDate,
         dateCompleted: dateCompleted === undefined ? undefined : dateCompleted ? new Date(dateCompleted) : null,
         dcSignOffDate: dcSignOffDate === undefined ? undefined : dcSignOffDate ? new Date(dcSignOffDate) : null,
         ...(routedToIds ? { routedTo: { create: routedToIds.map((userId) => ({ userId })) } } : {}),
+        ...(activityIds ? { linkedActivities: { create: activityIds.map((activityId) => ({ activityId })) } } : {}),
       },
     });
   });
@@ -140,7 +190,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 // removing a compliance record shouldn't be a routine data-entry action
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -156,8 +206,11 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Both join tables use ON DELETE RESTRICT, so their rows have to go first or
+  // the delete fails on a foreign key.
   await prisma.$transaction([
     prisma.incomingRoutedStaff.deleteMany({ where: { incomingId: existing.id } }),
+    prisma.incomingDocumentActivity.deleteMany({ where: { incomingId: existing.id } }),
     prisma.incomingDocument.delete({ where: { id: existing.id } }),
   ]);
 

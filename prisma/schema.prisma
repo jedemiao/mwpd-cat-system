@@ -26,6 +26,14 @@ enum DocComplexity {
   HIGHLY_TECHNICAL // ARTA: 20 working days
 }
 
+// Where a document came from. The source tracker splits these into two
+// separate pages and two near-identical ledgers; here it is one field on one
+// ledger, so the distinction is filterable without duplicating the module.
+enum DocumentOrigin {
+  INTERNAL // from within DMW — other divisions, regional/central office
+  EXTERNAL // from outside — agencies, employers, walk-in clients, email
+}
+
 enum LeaveType {
   CTO
   VACATION
@@ -74,6 +82,7 @@ model User {
   createdAt    DateTime @default(now())
 
   routedIncoming     IncomingRoutedStaff[]
+  receivedIncoming   IncomingDocument[]    @relation("IncomingReceivedBy")
   activityAssignment ActivityAssignee[]
   leaves             Leave[]
   auditLogs          AuditLog[]
@@ -86,6 +95,25 @@ model IncomingDocument {
   office           Office        @relation(fields: [officeId], references: [id])
 
   dateReceived     DateTime
+  // Clock time the document was accepted at the desk, "HH:MM" 24-hour.
+  // Deliberately NOT folded into dateReceived: it is captured now, but the
+  // ARTA calculation still runs off the date alone. Whether a 4:50 PM Friday
+  // arrival counts as Friday or Monday is office policy, not an engineering
+  // choice — see docs/PHP-TRACKER-ADOPTION.md. Do not wire it in by guessing.
+  timeReceived     String?
+  // The desk officer who accepted it, distinct from routedTo (who has to act
+  // on it) and from the audit trail (who typed the record).
+  receivedById     String?
+  receivedBy       User?         @relation("IncomingReceivedBy", fields: [receivedById], references: [id])
+  origin           DocumentOrigin @default(EXTERNAL)
+  // Sending office or agency — "DMW - Ortigas", an employer, an email address.
+  originAgency     String?
+  // Person who signed the document, as printed on it.
+  signatory        String?
+  // Type code from src/lib/documentTypeCodes.ts (e.g. "M", "A", "MOM"). Was
+  // previously only consumed to build routingNumber and then thrown away,
+  // which left the ledger unable to answer "show me every advisory".
+  documentType     String?
   routingNumber    String        @unique // e.g. 070126-L-008
   documentTitle    String
   routedTo         IncomingRoutedStaff[]         // Division Chief may route to more than one staff member
@@ -94,15 +122,31 @@ model IncomingDocument {
   leadTimeDays     Int           @default(3)   // derived from complexity, editable
   dueDate          DateTime?                    // dateReceived + leadTimeDays, computed on save
   numCorrections   Int           @default(0)
-  progressRemarks  String?
+  progressRemarks  String?                       // what is happening with it (routing state)
+  notes            String?                       // filing state, kept separate from progressRemarks
   dateCompleted    DateTime?
   dcSignOffDate    DateTime?                     // when the Division Chief signed off, distinct from ADAS III record-keeping
   scannedCopyUrl   String?                       // MinIO object key
   filed            Boolean       @default(false)
 
   outgoingReplies  OutgoingDocument[]            // documents dispatched in response
+  linkedActivities IncomingDocumentActivity[]    // the activities this document concerns
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+}
+
+// join table: a document can concern several activities and an activity can
+// have several documents — e.g. an advisory, an office order and a terminal
+// report all attached to one job fair. Same shape as IncomingRoutedStaff and
+// ActivityAssignee; this is the incoming-side counterpart to
+// OutgoingDocument.relatedIncomingId.
+model IncomingDocumentActivity {
+  incomingId String
+  incoming   IncomingDocument @relation(fields: [incomingId], references: [id])
+  activityId String
+  activity   Activity         @relation(fields: [activityId], references: [id])
+
+  @@id([incomingId, activityId])
 }
 
 model OutgoingDocument {
@@ -140,6 +184,7 @@ model Activity {
   inspectionReportUrl String?
 
   assignees         ActivityAssignee[]
+  linkedIncoming    IncomingDocumentActivity[]
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }
