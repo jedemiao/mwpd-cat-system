@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { getPresignedDownloadUrl } from "@/lib/minio";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 
@@ -8,7 +7,7 @@ import { logAudit, getClientIp } from "@/lib/auditLog";
 // after confirming the object belongs to the caller's office.
 export async function GET(req: NextRequest, props: { params: Promise<{ key: string[] }> }) {
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

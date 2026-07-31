@@ -4,12 +4,16 @@ import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Pagination } from "@/components/Pagination";
+import { PrintLink } from "@/components/PrintLink";
+import { PrintToolbar } from "@/components/PrintToolbar";
+import { PrintHeader } from "@/components/PrintHeader";
 import { ActivityCalendar } from "./ActivityCalendar";
 import { PlusIcon, SearchIcon } from "@/components/icons";
 
 const PAGE_SIZE = 20;
+const PRINT_MAX = 2000;
 
-type SearchParams = { q?: string; page?: string; view?: string; month?: string };
+type SearchParams = { q?: string; page?: string; view?: string; month?: string; print?: string };
 
 // Server component: fetches directly via Prisma (no client-side fetch needed
 // for the initial render), scoped to the logged-in user's office.
@@ -20,6 +24,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
 
   const q = searchParams.q?.trim() ?? "";
   const view = searchParams.view === "calendar" ? "calendar" : "list";
+  const isPrint = searchParams.print === "1";
   const extraQuery = q ? `&q=${encodeURIComponent(q)}` : "";
 
   const searchWhere: Prisma.ActivityWhereInput = q
@@ -43,14 +48,14 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
   const where: Prisma.ActivityWhereInput = { officeId, ...searchWhere };
 
-  const [activities, total] = await Promise.all([
+  const [activities, total, office] = await Promise.all([
     view === "list"
       ? prisma.activity.findMany({
           where,
           orderBy: { date: "desc" },
           include: { assignees: { include: { user: { select: { name: true } } } } },
-          skip: (page - 1) * PAGE_SIZE,
-          take: PAGE_SIZE,
+          skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
+          take: isPrint ? PRINT_MAX : PAGE_SIZE,
         })
       : prisma.activity.findMany({
           // Match activities whose [date, endDate] range overlaps the visible
@@ -74,44 +79,90 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           include: { assignees: { include: { user: { select: { name: true } } } } },
         }),
     view === "list" ? prisma.activity.count({ where }) : Promise.resolve(0),
+    isPrint ? prisma.office.findUnique({ where: { id: officeId }, select: { name: true } }) : Promise.resolve(null),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const monthLabel = new Date(calendarYear, calendarMonth, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const monthParam = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+  const backHref =
+    view === "calendar"
+      ? `/activities?view=calendar&month=${monthParam}${extraQuery}`
+      : `/activities${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+  // The calendar renders one month whole, so its printout is that month, not a
+  // row count — hence the different header title and total between the views.
+  const printTotal = view === "calendar" ? activities.length : total;
+
   return (
     <main className="space-y-4 p-6 lg:p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Monthly activity</h1>
-        <Link href="/activities/new" className="btn-primary">
-          <PlusIcon className="h-4 w-4" />
-          New
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <form action="/activities" method="get" className="flex gap-2">
-          {view === "calendar" && <input type="hidden" name="view" value="calendar" />}
-          <div className="relative w-72">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400 dark:text-white/30" />
-            <input type="text" name="q" defaultValue={q} placeholder="Search activity or remarks…" className="field-input pl-9" />
-          </div>
-          <button type="submit" className="btn-dark">
-            Search
-          </button>
-        </form>
-
-        <div className="flex gap-2">
-          <Link href={`/activities${q ? `?q=${encodeURIComponent(q)}` : ""}`} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
-            List
-          </Link>
-          <Link
-            href={`/activities?view=calendar${extraQuery}`}
-            className={view === "calendar" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
-          >
-            Calendar
-          </Link>
+      {isPrint ? (
+        <div className="flex items-center justify-between print:hidden">
+          <h1 className="text-xl font-semibold text-ink-900 dark:text-white">
+            Monthly activity <span className="text-ink-400 dark:text-white/30">· print preview</span>
+          </h1>
+          <PrintToolbar backHref={backHref} />
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Monthly activity</h1>
+            <div className="flex gap-2">
+              <PrintLink
+                basePath="/activities"
+                searchParams={{
+                  q,
+                  view: view === "calendar" ? "calendar" : undefined,
+                  month: view === "calendar" ? monthParam : undefined,
+                }}
+              />
+              <Link href="/activities/new" className="btn-primary">
+                <PlusIcon className="h-4 w-4" />
+                New
+              </Link>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <form action="/activities" method="get" className="flex gap-2">
+              {view === "calendar" && <input type="hidden" name="view" value="calendar" />}
+              <div className="relative w-72">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400 dark:text-white/30" />
+                <input type="text" name="q" defaultValue={q} placeholder="Search activity or remarks…" className="field-input pl-9" />
+              </div>
+              <button type="submit" className="btn-dark">
+                Search
+              </button>
+            </form>
+
+            <div className="flex gap-2">
+              <Link href={`/activities${q ? `?q=${encodeURIComponent(q)}` : ""}`} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
+                List
+              </Link>
+              <Link
+                href={`/activities?view=calendar${extraQuery}`}
+                className={view === "calendar" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
+              >
+                Calendar
+              </Link>
+            </div>
+          </div>
+        </>
+      )}
+
+      {isPrint && (
+        <PrintHeader
+          officeName={office?.name ?? ""}
+          title={view === "calendar" ? `Activity calendar — ${monthLabel}` : "Monthly activity"}
+          filters={[{ label: "Search", value: q }]}
+          total={printTotal}
+          generatedBy={session!.user.name ?? "—"}
+          truncatedAt={view === "list" ? PRINT_MAX : undefined}
+        />
+      )}
 
       {view === "calendar" ? (
         <ActivityCalendar
@@ -137,7 +188,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                   <th>Person(s) incharge</th>
                   <th>Remarks</th>
                   <th>Supporting files</th>
-                  <th></th>
+                  <th className="print:hidden"></th>
                 </tr>
               </thead>
               <tbody>
@@ -159,7 +210,13 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                       <td>{names}</td>
                       <td>{activity.remarks ?? "—"}</td>
                       <td>
-                        {files.length > 0 ? (
+                        {files.length === 0 ? (
+                          "—"
+                        ) : isPrint ? (
+                          // On paper the useful fact is which supporting
+                          // documents exist, not a link to fetch them.
+                          files.map((f) => f.label).join(", ")
+                        ) : (
                           files.map((f, i) => (
                             <span key={f.label}>
                               {i > 0 && ", "}
@@ -168,11 +225,9 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                               </a>
                             </span>
                           ))
-                        ) : (
-                          "—"
                         )}
                       </td>
-                      <td>
+                      <td className="print:hidden">
                         <Link href={`/activities/${activity.id}`} className="font-medium text-primary hover:text-primary-600">
                           Edit
                         </Link>
@@ -184,7 +239,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             </table>
           </div>
 
-          <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q }} />
+          {!isPrint && <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q }} />}
         </>
       )}
     </main>

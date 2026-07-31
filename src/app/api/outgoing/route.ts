@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { buildOutgoingRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
@@ -17,7 +16,7 @@ const createSchema = z.object({
 
 // GET /api/outgoing — list documents for the logged-in user's office, newest first
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -34,7 +33,7 @@ export async function GET(req: NextRequest) {
 // POST /api/outgoing — create a new dispatch record, optionally linked to the
 // incoming request it answers via relatedIncomingId
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import bcrypt from "bcryptjs";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { passwordSchema } from "@/lib/passwordPolicy";
 import { z } from "zod";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
+  newPassword: passwordSchema,
 });
 
 // POST /api/account/change-password — change the logged-in user's own password
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = changePasswordSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    const first = parsed.error.issues[0]?.message ?? "Check the details and try again.";
+    return NextResponse.json({ error: first }, { status: 400 });
   }
 
   const { currentPassword, newPassword } = parsed.data;

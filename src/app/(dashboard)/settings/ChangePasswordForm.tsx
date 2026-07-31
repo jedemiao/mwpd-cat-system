@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { EyeIcon, EyeOffIcon } from "@/components/icons";
+import { PASSWORD_RULE_TEXT } from "@/lib/passwordPolicy";
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -95,6 +96,7 @@ export function ChangePasswordForm() {
             {showNew ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
           </button>
         </div>
+        <p className="mt-1 text-xs text-ink-500 dark:text-white/40">{PASSWORD_RULE_TEXT}</p>
       </div>
       <div>
         <label className="field-label" htmlFor="confirmPassword">

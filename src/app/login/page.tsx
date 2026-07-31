@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Image from "next/image";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon, EyeOffIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -11,6 +11,15 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/incoming";
+  const disabled = searchParams.get("disabled") === "1";
+  const stale = searchParams.get("stale") === "1";
+
+  // The dashboard layout bounces both cases here with the cookie still in the
+  // browser. Clear it so they land on a clean sign-in rather than bouncing off
+  // the dashboard on every click.
+  useEffect(() => {
+    if (disabled || stale) void signOut({ redirect: false });
+  }, [disabled, stale]);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +65,18 @@ function LoginForm() {
           <h2 className="font-display text-[26px] font-extrabold tracking-tight text-ink-900 dark:text-white">Sign in</h2>
           <p className="mb-6 mt-1 text-sm text-ink-500 dark:text-white/50">Enter your credentials to continue.</p>
 
+          {disabled && (
+            <div className="mb-4 rounded-md border border-warning/30 bg-warning-50 px-4 py-3 text-sm text-ink-700 dark:border-warning/20 dark:bg-warning/10 dark:text-white/70">
+              This account has been deactivated. Contact your Division Chief if you think this is a mistake.
+            </div>
+          )}
+
+          {stale && (
+            <div className="mb-4 rounded-md border border-info/30 bg-info-50 px-4 py-3 text-sm text-ink-700 dark:border-info/20 dark:bg-info/10 dark:text-white/70">
+              Your previous sign-in has expired. Please sign in again.
+            </div>
+          )}
+
           <div className="space-y-4">
             <div>
               <label className="field-label" htmlFor="username">
@@ -63,6 +84,7 @@ function LoginForm() {
               </label>
               <input
                 id="username"
+                name="username"
                 type="text"
                 autoComplete="username"
                 required
@@ -79,6 +101,7 @@ function LoginForm() {
               <div className="relative">
                 <input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required

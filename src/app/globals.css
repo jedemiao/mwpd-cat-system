@@ -123,3 +123,129 @@
     @apply stamp-chip border-duesoon/50 text-duesoon dark:border-duesoon/40 dark:text-[#dcb256];
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Print
+   ---------------------------------------------------------------------------
+   Ledgers are printed as government records, so the printed page is its own
+   medium — not a screenshot of the UI. Screen chrome is dropped via Tailwind's
+   `print:hidden` on the components themselves; what's left here is everything
+   that can't be expressed per-component.
+
+   The !important overrides exist because dark mode is a class on <html>, so
+   every `dark:bg-*` / `dark:text-*` utility still applies while printing. A
+   clerk printing at 9pm in dark mode would otherwise get white-on-dark pages
+   that drain a cartridge and read badly. Forcing black on white is correct for
+   every ledger regardless of the viewing theme.
+   --------------------------------------------------------------------------- */
+@media print {
+  /* Landscape: the ledgers run 6–8 columns and the calendar is a 7-wide grid.
+     Portrait forces both into unreadable column widths. */
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The page shell's padding duplicates the @page margin once the sidebar and
+     topbar are gone, costing a column of usable width. */
+  main {
+    padding: 0 !important;
+  }
+
+  /* Cards are a screen affordance — on paper they become a stray box around
+     the table. Flatten them but keep the table's own rules. */
+  .card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .data-table {
+    width: 100% !important;
+    font-size: 8.5pt !important;
+  }
+
+  /* Repeat the column headers on every sheet — a multi-page ledger whose
+     later pages have no headers can't be read. */
+  .data-table thead {
+    display: table-header-group !important;
+  }
+
+  .data-table thead th {
+    background: #fff !important;
+    color: #000 !important;
+    border-bottom: 1pt solid #000 !important;
+    padding: 4pt 5pt !important;
+  }
+
+  .data-table tbody td {
+    color: #000 !important;
+    border-bottom: 0.5pt solid #999 !important;
+    padding: 4pt 5pt !important;
+    vertical-align: top;
+  }
+
+  /* Never split a document's row across two sheets. */
+  .data-table tbody tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    background: transparent !important;
+  }
+
+  /* Links carry no meaning on paper; keep the text, drop the styling. */
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+
+  /* Status badges must survive greyscale, so they become outlined text rather
+     than relying on the fill colour that distinguishes them on screen. */
+  .badge {
+    background: #fff !important;
+    color: #000 !important;
+    border: 0.5pt solid #666 !important;
+  }
+
+  /* Calendar. The grid draws its cell borders as a 1px gap showing the
+     container's background through, so the container goes black and every
+     descendant white — which also flattens the "today" tint and its ring
+     (a Tailwind ring is a box-shadow), both meaningless on a filed sheet. */
+  .calendar-grid {
+    background: #000 !important;
+    border-color: #000 !important;
+    border-radius: 0 !important;
+  }
+
+  .calendar-grid > * {
+    min-height: 16mm;
+    box-shadow: none !important;
+  }
+
+  .calendar-grid *,
+  .calendar-grid > * {
+    background-color: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Entries are colour-filled pills on screen, keyed by assignee — a cue a
+     mono printer loses anyway, so they flatten to a rule-and-text. Truncation
+     is lifted too: a clipped activity name is fine when the full text is one
+     hover away, and not fine on a sheet that gets filed. */
+  .calendar-pill {
+    overflow: visible !important;
+    white-space: normal !important;
+    border: 0 !important;
+    border-left: 1.5pt solid #000 !important;
+    border-radius: 0 !important;
+    font-size: 7pt !important;
+    line-height: 1.25 !important;
+  }
+}

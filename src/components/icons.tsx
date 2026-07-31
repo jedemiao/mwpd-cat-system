@@ -219,3 +219,13 @@ export function EyeOffIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function PrinterIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M7 9V4h10v5" />
+      <path d="M7 18H5.5A1.5 1.5 0 0 1 4 16.5v-5A1.5 1.5 0 0 1 5.5 10h13a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H17" />
+      <rect x="7" y="15" width="10" height="5" rx="1" />
+    </svg>
+  );
+}
