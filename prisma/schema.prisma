@@ -202,6 +202,12 @@ model Activity {
   // Defaults to OTHERS so every pre-existing row stays valid without a
   // backfill guess: "unclassified" is honest, a fabricated category is not.
   category          ActivityCategory @default(OTHERS)
+  // Free-text specification, used only when category == OTHERS — same shape as
+  // Leave.typeOther. Optional rather than required (unlike leave's, where OTHER
+  // is a deliberate pick among five named types): OTHERS is this column's
+  // default and means "unclassified", so demanding text would tax every
+  // activity nobody bothered to categorise.
+  categoryOther     String?
   location          String?   // where it happens — "Butuan City Hall"
   remarks           String?
   officeOrderUrl    String?

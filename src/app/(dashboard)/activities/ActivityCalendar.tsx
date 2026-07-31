@@ -5,6 +5,7 @@ import {
   ACTIVITY_CATEGORY_CHIP,
   ACTIVITY_CATEGORY_DOT,
   ACTIVITY_CATEGORY_LABELS,
+  activityCategoryLabel,
   LEAVE_CHIP,
   LEAVE_DOT,
   LEAVE_LEGEND_LABEL,
@@ -19,6 +20,7 @@ type CalendarActivity = {
   endDate: Date | null;
   activityName: string;
   category: ActivityCategoryValue;
+  categoryOther: string | null;
   location: string | null;
   assignees: { id: string; name: string }[];
 };
@@ -212,7 +214,7 @@ export function ActivityCalendar({
               </div>
               <div className="space-y-1">
                 {dayActivities.map((activity) => {
-                  const categoryLabel = ACTIVITY_CATEGORY_LABELS[activity.category];
+                  const categoryLabel = activityCategoryLabel(activity.category, activity.categoryOther);
                   const where = activity.location ? ` @ ${activity.location}` : "";
                   const who = activity.assignees.length ? ` — ${activity.assignees.map((a) => a.name).join(", ")}` : "";
                   return (

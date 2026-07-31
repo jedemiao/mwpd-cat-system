@@ -35,6 +35,15 @@ export const ACTIVITY_CATEGORY_LABELS: Record<ActivityCategoryValue, string> = {
   OTHERS: "Others",
 };
 
+// `categoryOther` carries the free-text specification, and only when the
+// category is OTHERS — same contract as leaveTypeLabel() in leaveTypes.ts. The
+// routes clear the column whenever the category isn't OTHERS, so the guard here
+// is belt-and-braces for rows written before that rule existed.
+export function activityCategoryLabel(category: ActivityCategoryValue, categoryOther?: string | null): string {
+  const label = ACTIVITY_CATEGORY_LABELS[category] ?? category;
+  return category === "OTHERS" && categoryOther ? `${label} — ${categoryOther}` : label;
+}
+
 // Spelled out where there is room for it (the entry form's dropdown); the
 // short label above is what fits on a calendar chip and in the legend.
 export const ACTIVITY_CATEGORY_DESCRIPTIONS: Partial<Record<ActivityCategoryValue, string>> = {

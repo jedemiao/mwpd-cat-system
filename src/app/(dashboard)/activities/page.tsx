@@ -13,6 +13,7 @@ import {
   ACTIVITY_CATEGORIES,
   ACTIVITY_CATEGORY_DOT,
   ACTIVITY_CATEGORY_LABELS,
+  activityCategoryLabel,
   isActivityCategory,
   type ActivityCategoryValue,
 } from "@/lib/activityCategories";
@@ -45,6 +46,9 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           { activityName: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { remarks: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { location: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          // The "Others" specification is the only place some activities say
+          // what they actually were, so it has to be searchable.
+          { categoryOther: { contains: q, mode: Prisma.QueryMode.insensitive } },
         ],
       }
     : {};
@@ -237,6 +241,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             endDate: activity.endDate,
             activityName: activity.activityName,
             category: activity.category as ActivityCategoryValue,
+            categoryOther: activity.categoryOther,
             location: activity.location,
             assignees: activity.assignees.map((a) => ({ id: a.userId, name: a.user.name })),
           }))}
@@ -293,7 +298,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                           <span
                             className={`h-2 w-2 shrink-0 rounded-sm print:hidden ${ACTIVITY_CATEGORY_DOT[activity.category as ActivityCategoryValue]}`}
                           />
-                          {ACTIVITY_CATEGORY_LABELS[activity.category as ActivityCategoryValue]}
+                          {activityCategoryLabel(activity.category as ActivityCategoryValue, activity.categoryOther)}
                         </span>
                       </td>
                       <td>{names}</td>

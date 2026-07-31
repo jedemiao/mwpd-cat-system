@@ -360,6 +360,16 @@ hiding it in the UI, because the API can't accept it either — `POST`/`PATCH`
 with `category=ON_LEAVE` is a 400. Leave is read out of the `Leave` table and
 drawn onto the calendar, so there is exactly one source of truth for who is out.
 
+**"Others" takes a free-text specification** (`Activity.categoryOther`, migration
+`20260731164708_add_activity_category_other`), the same shape as
+`Leave.typeOther` — the routes clear the column whenever the effective category
+isn't `OTHERS`, so switching away can't strand its text on the record, and the
+text is searchable because for some activities it is the only place the record
+says what the thing actually was. One deliberate difference from leave's
+version: it is **optional**, not required. `OTHERS` is the column default and
+means "unclassified", so demanding a specification would tax every activity
+nobody got round to classifying.
+
 **Colour now encodes category, not assignee.** The calendar previously hashed
 the first assignee's id into one of five pills, which made "who's busy when"
 scannable without a legend. Colour can only carry one variable, and category is
@@ -386,11 +396,14 @@ grid to black-and-white — a colour key on a greyscale sheet is worse than none
 
 ### Verified
 
-35/35 on a scripted run against the dev server: category and location
+45/45 on a scripted run against the dev server: category and location
 round-tripping through create and update and at the database level, `ON_LEAVE`
 and unknown categories rejected 400 on both routes, the omitted-category
-default, the filter narrowing in both directions (and being ignored, not
-applied, when the URL carries a bogus value), location being searchable, the
+default, the "Others" specification round-tripping, being rejected when blank,
+being cleared when the category isn't `OTHERS` (on create and on a category
+switch) and surviving a switch back, the filter narrowing in both directions
+(and being ignored, not applied, when the URL carries a bogus value), location
+and the specification both being searchable, the
 legend rendering, leave projecting onto the calendar and linking to its record,
 leave correctly hidden while a category filter is on, and the print view
 keeping the filter and carrying the category as text. Dev database was restored

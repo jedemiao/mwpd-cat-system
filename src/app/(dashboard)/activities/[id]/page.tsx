@@ -38,6 +38,7 @@ export default async function EditActivityPage(props: { params: Promise<{ id: st
           endDate: toDateInputValue(activity.endDate),
           activityName: activity.activityName,
           category: activity.category as ActivityCategoryValue,
+          categoryOther: activity.categoryOther ?? "",
           location: activity.location ?? "",
           remarks: activity.remarks ?? "",
           officeOrderUrl: activity.officeOrderUrl ?? "",
