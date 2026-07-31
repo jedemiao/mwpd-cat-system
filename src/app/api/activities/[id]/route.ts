@@ -3,12 +3,16 @@ import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { canDelete } from "@/lib/authz";
+import { ACTIVITY_CATEGORIES } from "@/lib/activityCategories";
 import { z } from "zod";
 
 const updateSchema = z.object({
   date: z.string().optional(),
   endDate: z.string().nullable().optional(),
   activityName: z.string().optional(),
+  // See the note in the create route: ON_LEAVE is deliberately not accepted.
+  category: z.enum(ACTIVITY_CATEGORIES).optional(),
+  location: z.string().nullable().optional(),
   remarks: z.string().nullable().optional(),
   officeOrderUrl: z.string().nullable().optional(),
   memoUrl: z.string().nullable().optional(),

@@ -235,10 +235,14 @@
     color: #000 !important;
   }
 
-  /* Entries are colour-filled pills on screen, keyed by assignee — a cue a
-     mono printer loses anyway, so they flatten to a rule-and-text. Truncation
-     is lifted too: a clipped activity name is fine when the full text is one
-     hover away, and not fine on a sheet that gets filed. */
+  /* Entries are colour-filled pills on screen, keyed by category (and rose for
+     projected leave) — a cue a mono printer loses anyway, so they flatten to a
+     rule-and-text. The category isn't lost with the colour: each chip renders
+     its category name as a `print:inline` prefix, which is also why the
+     on-screen legend is `print:hidden` — a colour key on a greyscale sheet
+     would be worse than none. Truncation is lifted too: a clipped activity
+     name is fine when the full text is one hover away, and not fine on a sheet
+     that gets filed. */
   .calendar-pill {
     overflow: visible !important;
     white-space: normal !important;

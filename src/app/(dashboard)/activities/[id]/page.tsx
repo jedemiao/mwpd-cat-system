@@ -6,6 +6,7 @@ import { toDateInputValue } from "@/lib/formatDateInput";
 import { canDelete } from "@/lib/authz";
 import { DeleteButton } from "@/components/DeleteButton";
 import { ActivityForm } from "../ActivityForm";
+import { type ActivityCategoryValue } from "@/lib/activityCategories";
 
 export default async function EditActivityPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -36,6 +37,8 @@ export default async function EditActivityPage(props: { params: Promise<{ id: st
           date: toDateInputValue(activity.date),
           endDate: toDateInputValue(activity.endDate),
           activityName: activity.activityName,
+          category: activity.category as ActivityCategoryValue,
+          location: activity.location ?? "",
           remarks: activity.remarks ?? "",
           officeOrderUrl: activity.officeOrderUrl ?? "",
           memoUrl: activity.memoUrl ?? "",

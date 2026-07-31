@@ -339,7 +339,73 @@ the Division Chief answering the cutoff question. Do not guess a rule.
 **Done when** — a records clerk can log everything their PHP form captures, and
 filter the ledger the same five ways.
 
-## Phase 4 — Activity categories and division
+## Phase 4 — Activity categories ✅ built / division still open
+
+Phase 4 was always two things in one heading. The categories half is built; the
+division half is an architecture decision that needs the office, and is now the
+only thing left in this phase.
+
+### What shipped
+
+Migration `20260731162033_add_activity_category_and_location` — additive: the
+`ActivityCategory` enum and two columns on `Activity` (`category`, defaulting to
+`OTHERS`, and `location`). New `src/lib/activityCategories.ts` and
+`src/lib/leaveTypes.ts`. Touched: `ActivityCalendar.tsx`, `ActivityForm.tsx`,
+the activities list/edit pages, both activity API routes, `leave/page.tsx`,
+`globals.css`.
+
+**`ON_LEAVE` is not in the enum.** The plan said it must not be selectable in
+the dropdown; leaving it out of the Prisma enum entirely is stronger than
+hiding it in the UI, because the API can't accept it either — `POST`/`PATCH`
+with `category=ON_LEAVE` is a 400. Leave is read out of the `Leave` table and
+drawn onto the calendar, so there is exactly one source of truth for who is out.
+
+**Colour now encodes category, not assignee.** The calendar previously hashed
+the first assignee's id into one of five pills, which made "who's busy when"
+scannable without a legend. Colour can only carry one variable, and category is
+the better one: it is a closed vocabulary with names, so a legend can explain
+it, while an assignee hash could not. Worth knowing this was a real trade-off
+and not an oversight — if the office misses the per-person cue, the place to
+put it back is the chip's text or a separate person filter, not the colour.
+
+**Palette.** All nine hues come from Tailwind's stock palette and none are the
+app's semantic tokens (`primary`/`success`/`warning`/`danger`/`info`), so a
+category chip can never be misread as an ARTA status badge — that separation is
+structural rather than a thing to remember. Within the palette, saturation
+encodes the kind of day: work the office goes out and does is saturated
+(fuchsia, violet, orange, cyan, teal), days that are really about coverage are
+muted greys (slate, stone, zinc). Leave is rose — the one warm hue on the grid,
+because "who is out" is the question the calendar gets asked most. Rose is the
+closest of the nine to a semantic token (`danger`); ARTA badges never render on
+this page, and leave chips are further distinguished by carrying a person's
+name, but this is the one colour worth a second opinion from the office.
+
+**Print.** The legend is `print:hidden` and each chip instead renders its
+category as a `print:inline` text prefix, because the print block flattens the
+grid to black-and-white — a colour key on a greyscale sheet is worse than none.
+
+### Verified
+
+35/35 on a scripted run against the dev server: category and location
+round-tripping through create and update and at the database level, `ON_LEAVE`
+and unknown categories rejected 400 on both routes, the omitted-category
+default, the filter narrowing in both directions (and being ignored, not
+applied, when the URL carries a bogus value), location being searchable, the
+legend rendering, leave projecting onto the calendar and linking to its record,
+leave correctly hidden while a category filter is on, and the print view
+keeping the filter and carrying the category as text. Dev database was restored
+to its original 10 activities / 6 leaves afterwards.
+
+One assertion was vacuous before it was real, the same trap as Phase 3: the
+printed-chip check originally matched `"Job Fair"`, which the legend also
+contains (it is CSS-hidden, not absent from the markup), so it would have
+passed with no chip prefix at all. It now anchors on `>Job Fair — </span>`
+immediately preceding the activity name.
+
+Not verified: the calendar has not been looked at in a browser, and the printed
+output still hasn't been put on paper (carried over from Phase 1).
+
+### Original notes
 
 **Activity categories** — their nine are real office vocabulary worth taking
 verbatim: Job Fair, Conference/Training, Skeleton Force, Meetings, Public
@@ -399,6 +465,8 @@ record. Do not build it speculatively; wait until someone asks.
 
 **"Legend" is their name for the category field** — a single-select dropdown, one
 category per activity. Our `ActivityCategory` enum matches one-for-one.
+
+### Still open — division
 
 **Division — bigger than it looked.** Their user table shows a Division column
 unpopulated on every row, so it read as a dead label. The Create Account form

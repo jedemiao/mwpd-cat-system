@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
+import { ACTIVITY_CATEGORIES } from "@/lib/activityCategories";
 import { z } from "zod";
 
 const createSchema = z.object({
   date: z.string(), // ISO date string from the client — start date
   endDate: z.string().optional(), // set only for multi-day activities; must be >= date
   activityName: z.string(),
+  // ON_LEAVE is not one of these values and must never become one: leave lives
+  // in the Leave table and is only projected onto the calendar.
+  category: z.enum(ACTIVITY_CATEGORIES).optional(),
+  location: z.string().optional(),
   remarks: z.string().optional(),
   officeOrderUrl: z.string().optional(),
   memoUrl: z.string().optional(),
