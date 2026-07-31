@@ -61,8 +61,15 @@ model User {
   office       Office   @relation(fields: [officeId], references: [id])
   name         String
   username     String   @unique
+  email        String?  // contact detail and identifier; there is NO SMTP in this
+                        // system, so nothing is ever sent here. Nullable because
+                        // the seeded roster predates the field.
   passwordHash String
   role         Role     @default(STAFF)
+  // Staff who leave are deactivated, never deleted: Leave, AuditLog,
+  // IncomingRoutedStaff and ActivityAssignee all hold FKs to User, and their
+  // history has to stay readable. Blocks sign-in; leaves every record intact.
+  isActive     Boolean  @default(true)
   avatarUrl    String?  // MinIO object key for the profile photo
   createdAt    DateTime @default(now())
 

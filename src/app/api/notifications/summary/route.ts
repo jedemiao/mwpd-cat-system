@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { getArtaAlertCounts } from "@/lib/artaAlerts";
 import { getRoutedToMeSummary } from "@/lib/notifications";
 
@@ -13,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Authoritative snapshot the notification bell re-fetches whenever a live
 // event arrives, instead of hand-rolling increment/decrement math client-side.
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

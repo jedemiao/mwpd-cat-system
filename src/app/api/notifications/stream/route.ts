@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { subscribeToUser } from "@/lib/notifyBus";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +10,7 @@ const HEARTBEAT_MS = 20000;
 // signed-in user's browser tab. One in-memory subscription per open tab —
 // fine at this office's scale (see notifyBus.ts for why no external broker).
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return new Response("Unauthorized", { status: 401 });
   }

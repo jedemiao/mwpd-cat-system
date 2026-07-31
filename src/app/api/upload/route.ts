@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { randomUUID } from "crypto";
 import { fileTypeFromBuffer } from "file-type";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { getMinioClient, ensureBucket, SCANS_BUCKET } from "@/lib/minio";
 import { scanBuffer } from "@/lib/clamav";
 
@@ -24,7 +23,7 @@ const ALLOWED_SHARED_TYPES = new Set([
 // scoped to that office (see /api/files/[...key]) — unless scope=shared,
 // used only by the Forms library, which every office can read.
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

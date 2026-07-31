@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { z } from "zod";
@@ -18,7 +17,7 @@ const createSchema = z.object({
 
 // GET /api/activities — list activities for the logged-in user's office, newest first
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -34,7 +33,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/activities — create an activity with one or more people in charge
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

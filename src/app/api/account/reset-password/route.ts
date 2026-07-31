@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import bcrypt from "bcryptjs";
-import { authOptions } from "@/lib/auth";
+import { getActiveSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canResetStaffPassword } from "@/lib/authz";
+import { passwordSchema } from "@/lib/passwordPolicy";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { z } from "zod";
 
 const resetSchema = z.object({
   userId: z.string(),
-  newPassword: z.string().min(8),
+  newPassword: passwordSchema,
 });
 
 // POST /api/account/reset-password — a Division Chief (or Admin) sets a new
@@ -18,7 +18,7 @@ const resetSchema = z.object({
 // gate. Office-scoped and audit-logged; the new password itself is never
 // written to the audit trail.
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -29,7 +29,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = resetSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    // A string, not error.flatten() — the form renders `error` directly, and an
+    // object would surface to the Chief as a generic "something went wrong"
+    // instead of telling them which password rule was missed.
+    const first = parsed.error.issues[0]?.message ?? "Check the details and try again.";
+    return NextResponse.json({ error: first }, { status: 400 });
   }
 
   const { userId, newPassword } = parsed.data;

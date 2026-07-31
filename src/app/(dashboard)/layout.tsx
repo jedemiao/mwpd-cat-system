@@ -16,8 +16,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const [{ overdue, dueSoon }, routed, user] = await Promise.all([
     getArtaAlertCounts(session.user.officeId),
     getRoutedToMeSummary(session.user.officeId, session.user.id),
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { avatarUrl: true } }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { avatarUrl: true, isActive: true } }),
   ]);
+
+  // Sign-in already refuses deactivated accounts, but a JWT issued before the
+  // deactivation stays valid until it expires. This is the gate that makes
+  // "deactivate" take effect immediately for someone already signed in.
+  //
+  // The two failure modes are reported differently on purpose. A token whose
+  // user id isn't in this database at all is NOT a deactivated account — it's
+  // a token minted against a different database (the dev server and the
+  // deployed stack share a NEXTAUTH_SECRET but have separate user tables, so a
+  // cookie set by one is accepted-then-orphaned by the other). Telling that
+  // person "your account has been deactivated" sends them to their Division
+  // Chief over what is really a stale cookie.
+  if (!user) redirect("/login?stale=1");
+  if (!user.isActive) redirect("/login?disabled=1");
 
   return (
     <div className="flex">

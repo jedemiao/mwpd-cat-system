@@ -22,6 +22,11 @@ export const authOptions: NextAuthOptions = {
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
 
+        // Deactivated staff keep their records but lose access. Checked after
+        // the password compare on purpose: failing earlier would let anyone
+        // probing usernames tell an inactive account from a wrong password.
+        if (!user.isActive) return null;
+
         return {
           id: user.id,
           name: user.name,
