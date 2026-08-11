@@ -69,6 +69,17 @@ model Office {
   code      String   @unique // short code, e.g. "MWPTD-CARAGA"
   createdAt DateTime @default(now())
 
+  // Whether this office is subject to ARTA (Anti-Red Tape Act) due dates.
+  // Only MWPTD is — the other divisions and ORD are exempt, so due-date
+  // alerts, the nav badge and the dashboard's compliance board are all
+  // meaningless noise for them.
+  //
+  // Defaults to false so a division onboarded later is exempt unless someone
+  // deliberately opts it in: wrongly showing an office overdue-document alerts
+  // it has no duty to act on is worse than wrongly showing none, and the
+  // second mistake is the one anybody would notice.
+  tracksArta Boolean @default(false)
+
   // Monotonic counters for auto-generated routing numbers — a live count()
   // would reuse numbers after a delete, colliding with the unique
   // constraint on routingNumber. Separate per module: Incoming and

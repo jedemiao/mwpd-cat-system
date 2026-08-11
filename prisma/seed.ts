@@ -25,7 +25,10 @@ async function main() {
     update: {},
     // No "- Caraga" suffix: this deployment serves only Region XIII, so the
     // region is implied on every unit and just crowds the sidebar.
-    create: { name: "Migrant Workers Protection Division", code: "MWPTD-CARAGA" },
+    //
+    // tracksArta: MWPTD is the one office subject to ARTA due dates. The other
+    // divisions and ORD are exempt and get the column's false default.
+    create: { name: "Migrant Workers Protection Division", code: "MWPTD-CARAGA", tracksArta: true },
   });
 
   const defaultPasswordHash = await bcrypt.hash("changeme123", 10);

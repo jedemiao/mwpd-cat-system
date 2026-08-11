@@ -6,6 +6,9 @@ import { getArtaAlertDocuments } from "@/lib/artaAlerts";
 import { StatCard } from "@/components/StatCard";
 import { Badge } from "@/components/Badge";
 import { InboxIcon, SendIcon, ClipboardListIcon, UsersIcon } from "@/components/icons";
+import { ActivityCalendar } from "./activities/ActivityCalendar";
+import { type ActivityCategoryValue } from "@/lib/activityCategories";
+import { leaveTypeLabel } from "@/lib/leaveTypes";
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
@@ -45,8 +48,18 @@ export default async function DashboardHomePage() {
   const today = new Date();
   const weekAhead = addDays(today, 7);
 
+  // The dashboard always shows the current month; paging lives on /activities,
+  // which is where someone goes to actually work with the calendar.
+  const calendarYear = today.getFullYear();
+  const calendarMonth = today.getMonth();
+  const monthStart = new Date(calendarYear, calendarMonth, 1);
+  const monthEnd = new Date(calendarYear, calendarMonth + 1, 1);
+
   const [
     { overdueDocs, dueSoonDocs },
+    office,
+    monthActivities,
+    monthLeaves,
     incomingPendingCount,
     outgoingPendingCount,
     activitiesThisMonthCount,
@@ -57,6 +70,32 @@ export default async function DashboardHomePage() {
     upcomingLeave,
   ] = await Promise.all([
     getArtaAlertDocuments(officeId),
+    prisma.office.findUnique({ where: { id: officeId }, select: { tracksArta: true } }),
+    // Same overlap test the /activities calendar uses, so a multi-day activity
+    // running across a month boundary still appears on this month's grid.
+    prisma.activity.findMany({
+      where: {
+        officeId,
+        AND: [
+          { date: { lt: monthEnd } },
+          { OR: [{ endDate: null, date: { gte: monthStart } }, { endDate: { gte: monthStart } }] },
+        ],
+      },
+      orderBy: { date: "asc" },
+      include: { assignees: { include: { user: { select: { name: true } } } } },
+    }),
+    // Leave is projected onto the calendar, never stored as an activity.
+    prisma.leave.findMany({
+      where: {
+        officeId,
+        AND: [
+          { leaveStart: { lt: monthEnd } },
+          { OR: [{ leaveEnd: null, leaveStart: { gte: monthStart } }, { leaveEnd: { gte: monthStart } }] },
+        ],
+      },
+      orderBy: { leaveStart: "asc" },
+      include: { personnel: { select: { name: true } } },
+    }),
     prisma.incomingDocument.count({ where: { officeId, dateCompleted: null } }),
     prisma.outgoingDocument.count({ where: { officeId, filed: false } }),
     prisma.activity.count({
@@ -102,8 +141,12 @@ export default async function DashboardHomePage() {
         </p>
       </div>
 
-      {/* ARTA compliance is the legally load-bearing metric of this system, so it leads —
-          rendered as a docket board, since that's how due dates are actually tracked here. */}
+      {/* ARTA compliance is the legally load-bearing metric for the office that
+          carries it, so it leads — rendered as a docket board, since that's how
+          due dates are actually tracked here. Only MWPTD is subject to ARTA;
+          for the exempt divisions this whole board is omitted rather than shown
+          empty, and the month calendar below becomes the page's lead. */}
+      {office?.tracksArta && (
       <section className="card overflow-hidden">
         <div className="card-header">
           <div>
@@ -142,6 +185,52 @@ export default async function DashboardHomePage() {
             </div>
           )}
         </div>
+      </section>
+      )}
+
+      {/* The month at a glance — activities colour-coded by category with leave
+          projected on. This is the working view for the divisions whose output
+          is events rather than correspondence, so it sits high on the page;
+          /activities is where it can be paged, filtered and printed. */}
+      <section className="card overflow-hidden">
+        <div className="card-header">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-ink-500 dark:text-white/40">
+              This month
+            </p>
+            <h2 className="font-display text-base font-semibold text-ink-900 dark:text-white">
+              {monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+            </h2>
+          </div>
+          <Link
+            href={`/activities?view=calendar&month=${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`}
+            className="text-sm text-civic hover:text-civic-600 dark:text-civic-300 dark:hover:text-white"
+          >
+            Open calendar
+          </Link>
+        </div>
+        <ActivityCalendar
+          year={calendarYear}
+          month={calendarMonth}
+          extraQuery=""
+          activities={monthActivities.map((activity) => ({
+            id: activity.id,
+            date: activity.date,
+            endDate: activity.endDate,
+            activityName: activity.activityName,
+            category: activity.category as ActivityCategoryValue,
+            categoryOther: activity.categoryOther,
+            location: activity.location,
+            assignees: activity.assignees.map((a) => ({ id: a.userId, name: a.user.name })),
+          }))}
+          leaves={monthLeaves.map((leave) => ({
+            id: leave.id,
+            personName: leave.personnel.name,
+            typeLabel: leaveTypeLabel(leave.type, leave.typeOther),
+            date: leave.leaveStart,
+            endDate: leave.leaveEnd,
+          }))}
+        />
       </section>
 
       {/* Quick stats */}
