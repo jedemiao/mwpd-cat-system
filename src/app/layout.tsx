@@ -11,8 +11,11 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-displ
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "MWPtD Tracker",
-  description: "Communication and activity tracker for MWPD",
+  // Office-neutral: this layout also wraps /login, which is shown before any
+  // office is known, and every unit in the regional office shares this tab
+  // title. The signed-in unit is named in the sidebar instead.
+  title: "DMW Caraga Tracker",
+  description: "Communication and activity tracker for DMW Regional Office XIII",
   // Browser-tab favicon: the DMW seal (public/dmw_logo.png, same image as
   // asset/dmw_logo.png) instead of the browser's default globe.
   icons: {

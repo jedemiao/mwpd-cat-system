@@ -23,9 +23,25 @@ type NavItem = {
   badge?: { count: number; tone: "danger" | "warning" } | null;
 };
 
-export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number }) {
+export function Sidebar({
+  overdue,
+  dueSoon,
+  officeName,
+  officeCode,
+}: {
+  overdue: number;
+  dueSoon: number;
+  /** The signed-in user's own office — every unit sees its own name here, never another's. */
+  officeName: string;
+  officeCode: string;
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Same truncation the outgoing routing prefix uses (src/lib/documentTypeCodes.ts):
+  // the seeded office is coded "MWPTD-CARAGA" but signs itself "MWPTD", and the
+  // units onboarded later ("FAD", "WRSD") have no suffix to strip.
+  const shortCode = officeCode.split("-")[0];
 
   const items: NavItem[] = [
     { href: "/", label: "Dashboard", icon: <GridIcon className="h-[18px] w-[18px]" /> },
@@ -54,8 +70,10 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
         </span>
         {!collapsed && (
           <div className="leading-tight">
-            <p className="font-display text-sm font-semibold tracking-tight">MWPtD Tracker</p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-white/45">DMW · Protection Div.</p>
+            <p className="font-display text-sm font-semibold tracking-tight">{shortCode} Tracker</p>
+            {/* The regional office, not the division — the division is named in
+                the title above and in full at the foot of the nav. */}
+            <p className="font-mono text-[10px] uppercase tracking-wider text-white/45">DMW · Caraga</p>
           </div>
         )}
       </div>
@@ -101,7 +119,7 @@ export function Sidebar({ overdue, dueSoon }: { overdue: number; dueSoon: number
 
       {!collapsed && (
         <div className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-white/35">
-          Migrant Workers Protection Division
+          {officeName}
         </div>
       )}
 

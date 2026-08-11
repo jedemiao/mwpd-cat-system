@@ -13,10 +13,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Fetched fresh rather than read off the JWT, so a photo change shows up
   // immediately instead of waiting for the session token to be reissued.
-  const [{ overdue, dueSoon }, routed, user] = await Promise.all([
+  // The office is read from the session's officeId — never from anything the
+  // client sends — so each unit's chrome names that unit and nothing else.
+  const [{ overdue, dueSoon }, routed, user, office] = await Promise.all([
     getArtaAlertCounts(session.user.officeId),
     getRoutedToMeSummary(session.user.officeId, session.user.id),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { avatarUrl: true, isActive: true } }),
+    prisma.office.findUnique({ where: { id: session.user.officeId }, select: { name: true, code: true } }),
   ]);
 
   // Sign-in already refuses deactivated accounts, but a JWT issued before the
@@ -35,7 +38,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex">
-      <Sidebar overdue={overdue} dueSoon={dueSoon} />
+      <Sidebar
+        overdue={overdue}
+        dueSoon={dueSoon}
+        officeName={office?.name ?? "DMW Regional Office XIII"}
+        officeCode={office?.code ?? "DMW"}
+      />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <Topbar
           userName={session.user.name ?? "User"}
