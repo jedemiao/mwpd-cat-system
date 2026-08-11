@@ -23,7 +23,9 @@ async function main() {
   const office = await prisma.office.upsert({
     where: { code: "MWPTD-CARAGA" },
     update: {},
-    create: { name: "Migrant Workers Protection Division - Caraga", code: "MWPTD-CARAGA" },
+    // No "- Caraga" suffix: this deployment serves only Region XIII, so the
+    // region is implied on every unit and just crowds the sidebar.
+    create: { name: "Migrant Workers Protection Division", code: "MWPTD-CARAGA" },
   });
 
   const defaultPasswordHash = await bcrypt.hash("changeme123", 10);
