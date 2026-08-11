@@ -526,6 +526,97 @@ screenshots.
 
 ---
 
+## Phase 6 — Multi-division rollout and ORD
+
+Settled with the office on 2026-08-10. This resolves the "Still open — division"
+question in Phase 4, and adds a unit that earlier phases never accounted for.
+
+### The five units
+
+| Code | Unit |
+|---|---|
+| `FAD` | Finance and Administrative Division |
+| `MWPTD` | Migrant Workers Protection Division (currently live, seeded as `MWPTD-CARAGA`) |
+| `MWPSD` | Migrant Workers Processing Division |
+| `WRSD` | Welfare and Reintegration Services Division |
+| `ORD` | **Office of the Regional Director — not a division; sits above them** |
+
+All codes are hyphen-free and mutually distinct, which matters: the outgoing
+routing prefix is the office code up to its first hyphen
+(`src/lib/documentTypeCodes.ts`), so each unit gets a distinct prefix for free.
+Note `MWPTD-CARAGA` already occupies the `MWPTD` prefix — do not create a second
+office coded `MWPTD`.
+
+### MWPSD is a replacement, not a parallel run
+
+This closes the Phase 5 gate. MWPSD moves onto this system rather than keeping
+their PHP tracker as a live system. Historical data import was waved off as "no
+worries" — **confirm before switching `192.168.100.210` off**, because their
+legacy control numbers (`PSD-2026-07-367`) are cited on physical documents and
+would otherwise become unlookupable. Keeping their system running read-only as
+an archive is the cheap answer.
+
+### ORD is a peer unit, not an oversight layer
+
+Corrected by the office on 2026-08-11, reversing an earlier reading recorded
+here. **ORD holds the same role as any division and gets its own office row.**
+It is not a parent, it does not see other units' records, and it needs no
+cross-division view. Isolation between all five units is symmetric.
+
+This settles the Phase 4 "Still open — division" question in favour of
+**option 2: each unit is simply its own `Office` row.** No `Division` model, no
+`Office.parentOfficeId`, no cross-office read path — and therefore no exception
+to the rule that every query is scoped to `session.user.officeId`. The existing
+schema and the existing scoping already do everything required.
+
+An earlier draft of this section recommended a `parentOfficeId` hierarchy to
+give ORD a read-only view across divisions. That requirement does not exist.
+The hierarchy is not needed and should not be built.
+
+### ORD → division correspondence
+
+Mail does move between units, but it needs no new schema. It is recorded the way
+inter-office mail already is: the receiving division logs an incoming document
+with `originAgency` naming the sender — the same free-text field that already
+carries "DMW - Ortigas". There is no hard FK linking one unit's outgoing record
+to another's incoming record, and none is required; that matches how the office
+works on paper today.
+
+Consequences worth knowing rather than fixing:
+
+- A document handed from ORD to MWPTD is two independent records. Nothing joins
+  them, and no report can trace the handoff automatically.
+- Because each unit logs its own receipt, each starts its own ARTA clock from
+  its own `dateReceived`. No lead time is inherited across units. This is the
+  behaviour `src/lib/artaLeadTime.ts` already implements — worth confirming with
+  the office that per-unit clocks are what compliance expects, but it needs no
+  code either way.
+
+### Role naming
+
+There is no `REGIONAL_DIRECTOR` role, and none is needed now that ORD is a peer:
+its head is a `DIVISION_CHIEF` like any other unit's, with the same powers over
+the same office-scoped data. The label reads oddly for the Regional Director's
+office, but the behaviour is correct and adding a role would be cosmetic.
+
+### Status
+
+`scripts/onboard-division.ts` implements exactly this shape and needs no change.
+On 2026-08-11 it created `FAD`, `MWPSD` and `WRSD`, each with a temporary
+`DIVISION_CHIEF` (`temp.fad`, `temp.mwpsd`, `temp.wrsd`), **on the local dev
+database only** — the deployment database is untouched and still holds one
+office.
+
+Before the live run, note that `PATCH /api/users/[id]` accepts only `role` and
+`isActive`: **a user's `name` and `username` can never be changed through the
+app**, and users are deactivated rather than deleted because `AuditLog`,
+`Leave`, `IncomingRoutedStaff` and `ActivityAssignee` hold FKs to them. A
+`temp.*` account created in production is therefore permanent. Wait for real
+Chief names, or accept an inactive placeholder row in the office's records
+forever.
+
+---
+
 ## Order and rationale
 
 1 → 2 → 3 → 4 → 5. Phase 1 is self-contained and delivers the most immediately
