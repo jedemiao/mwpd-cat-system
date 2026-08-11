@@ -10,7 +10,14 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
-import { DOCUMENT_TYPE_LABELS } from "@/lib/documentTypeCodes";
+import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_OTHER_CODE, documentTypeLabel } from "@/lib/documentTypeCodes";
+
+// In the ledger's narrow type column, an "Others" row shows what was actually
+// typed — a bare "O" would be the one code the legend cannot explain.
+function documentTypeCell(code: string | null, other: string | null): string {
+  if (code === DOCUMENT_TYPE_OTHER_CODE) return other || DOCUMENT_TYPE_OTHER_CODE;
+  return code ?? "—";
+}
 
 const PAGE_SIZE = 20;
 
@@ -89,15 +96,24 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
     prisma.incomingDocument.findMany({
       where,
       orderBy: { dateReceived: "desc" },
-      include: { routedTo: { include: { user: { select: { name: true } } } } },
+      include: {
+        routedTo: { include: { user: { select: { name: true } } } },
+        // The ledger names the desk officer who accepted the document, as the
+        // office's own internal register does.
+        receivedBy: { select: { name: true } },
+      },
       // The print view shows the whole filtered ledger, not one screen of it.
       skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
       take: isPrint ? PRINT_MAX : PAGE_SIZE,
     }),
     prisma.incomingDocument.count({ where }),
     getArtaAlertDocuments(officeId),
-    // Only needed for the printed letterhead — skip the query on normal loads.
-    isPrint ? prisma.office.findUnique({ where: { id: officeId }, select: { name: true } }) : Promise.resolve(null),
+    // name is only needed for the printed letterhead, but tracksArta decides
+    // whether the Due date column renders at all, so this now runs every load.
+    prisma.office.findUnique({
+      where: { id: officeId },
+      select: { name: true, tracksArta: true, detailedLedgerColumns: true },
+    }),
     // Filter options derived from what's actually been logged, office-wide —
     // deliberately not narrowed by the current filter, or choosing one value
     // would empty the other dropdowns.
@@ -137,21 +153,30 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const backHref = listHref("/incoming", activeFilters);
 
+  // The office keeps internal and external as two separate ledgers, and the
+  // nav links straight into each. Naming the ledger in the heading is what
+  // stops a filtered list from looking identical to the full one — without it
+  // the only difference on screen is which rows happen to be missing.
+  const ledgerLabel = ORIGIN_LABELS[origin] ?? "";
+  const heading = ledgerLabel ? `Incoming · ${ledgerLabel}` : "Incoming documents";
+  const tracksArta = office?.tracksArta ?? false;
+  const detailedColumns = office?.detailedLedgerColumns ?? false;
+
   return (
     <main className="space-y-4 p-6 lg:p-8">
       {isPrint ? (
         <div className="flex items-center justify-between print:hidden">
           <h1 className="text-xl font-semibold text-ink-900 dark:text-white">
-            Incoming documents <span className="text-ink-400 dark:text-white/30">· print preview</span>
+            {heading} <span className="text-ink-400 dark:text-white/30">· print preview</span>
           </h1>
           <PrintToolbar backHref={backHref} />
         </div>
       ) : (
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-ink-900 dark:text-white">Incoming documents</h1>
+          <h1 className="text-xl font-semibold text-ink-900 dark:text-white">{heading}</h1>
           <div className="flex gap-2">
             <PrintLink basePath="/incoming" searchParams={activeFilters} />
-            <Link href="/incoming/new" className="btn-primary">
+            <Link href={origin ? `/incoming/new?origin=${origin}` : "/incoming/new"} className="btn-primary">
               <PlusIcon className="h-4 w-4" />
               New
             </Link>
@@ -269,49 +294,99 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
       <div className="card overflow-x-auto">
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Date received</th>
-              <th>Routing number</th>
-              {/* Source and Type earn a column; agency, signatory, received-by
-                  and notes are on the record and in the filters instead — a
-                  ledger that runs past ten columns stops being readable on
-                  screen and stops fitting a printed sheet. */}
-              <th>Source</th>
-              <th>Type</th>
-              <th>Particulars</th>
-              <th>Routed to</th>
-              <th>Due date</th>
-              <th>Status</th>
-              <th>Scanned copy</th>
-              <th className="print:hidden"></th>
-            </tr>
+            {/* Two layouts. The register layout follows MWPSD's own internal
+                register (mwpsd_tracker/…view_incoming_internal.php.png) column
+                for column, because their clerks read it by position; every
+                other office keeps the compact ledger, which fits a printed
+                sheet where fifteen columns do not.
+
+                Departures from the reference, both deliberate: Source appears
+                only in the combined view (inside a ledger every row repeats the
+                same value), and Routed to / Due date / Status are ours with no
+                reference counterpart — dropping them would regress Division
+                Chief routing and ARTA, which the adoption plan forbids. */}
+            {detailedColumns ? (
+              <tr>
+                <th>Date</th>
+                <th>Received By</th>
+                <th>Time</th>
+                <th>Control No.</th>
+                <th>Doc Type</th>
+                {!origin && <th>Source</th>}
+                <th>Office/Agency</th>
+                <th>Signatories</th>
+                <th>Particulars</th>
+                <th>Remarks</th>
+                <th>Notes</th>
+                <th>Routed to</th>
+                {tracksArta && <th>Due date</th>}
+                <th>Status</th>
+                <th>Scanned copy</th>
+                <th className="print:hidden"></th>
+              </tr>
+            ) : (
+              <tr>
+                <th>Date received</th>
+                <th>Routing number</th>
+                {!origin && <th>Source</th>}
+                <th>Type</th>
+                <th>Particulars</th>
+                <th>Routed to</th>
+                {tracksArta && <th>Due date</th>}
+                <th>Status</th>
+                <th>Scanned copy</th>
+                <th className="print:hidden"></th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {docs.map((doc) => {
               const overdue = doc.dueDate && !doc.dateCompleted && doc.dueDate < today;
               return (
                 <tr key={doc.id}>
-                  <td className="whitespace-nowrap">
-                    {doc.dateReceived.toLocaleDateString()}
-                    {doc.timeReceived && (
-                      <span className="ml-1 text-xs text-ink-400 dark:text-white/30">{doc.timeReceived}</span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
-                  <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>
-                  <td className="whitespace-nowrap text-xs" title={DOCUMENT_TYPE_LABELS[doc.documentType ?? ""] ?? ""}>
-                    {doc.documentType ?? "—"}
-                  </td>
-                  <td>
-                    {doc.documentTitle}
-                    {doc.originAgency && (
-                      <span className="block text-xs text-ink-400 dark:text-white/30">{doc.originAgency}</span>
-                    )}
-                  </td>
+                  {detailedColumns ? (
+                    <>
+                      <td className="whitespace-nowrap">{doc.dateReceived.toLocaleDateString()}</td>
+                      <td className="whitespace-nowrap">{doc.receivedBy?.name ?? "—"}</td>
+                      <td className="whitespace-nowrap text-xs">{doc.timeReceived ?? "—"}</td>
+                      <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
+                      <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
+                        {documentTypeCell(doc.documentType, doc.documentTypeOther)}
+                      </td>
+                      {!origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
+                      <td>{doc.originAgency ?? "—"}</td>
+                      <td>{doc.signatory ?? "—"}</td>
+                      <td>{doc.documentTitle}</td>
+                      <td>{doc.progressRemarks ?? "—"}</td>
+                      <td>{doc.notes ?? "—"}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="whitespace-nowrap">
+                        {doc.dateReceived.toLocaleDateString()}
+                        {doc.timeReceived && (
+                          <span className="ml-1 text-xs text-ink-400 dark:text-white/30">{doc.timeReceived}</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
+                      {!origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
+                      <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
+                        {documentTypeCell(doc.documentType, doc.documentTypeOther)}
+                      </td>
+                      <td>
+                        {doc.documentTitle}
+                        {doc.originAgency && (
+                          <span className="block text-xs text-ink-400 dark:text-white/30">{doc.originAgency}</span>
+                        )}
+                      </td>
+                    </>
+                  )}
                   <td className="whitespace-nowrap">
                     {doc.routedTo.length > 0 ? doc.routedTo.map((r) => r.user.name).join(", ") : "—"}
                   </td>
-                  <td className="whitespace-nowrap">{doc.dueDate?.toLocaleDateString() ?? "—"}</td>
+                  {tracksArta && (
+                    <td className="whitespace-nowrap">{doc.dueDate?.toLocaleDateString() ?? "—"}</td>
+                  )}
                   <td className="whitespace-nowrap">
                     {doc.dateCompleted ? (
                       <Badge variant="success">Completed</Badge>

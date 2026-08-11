@@ -9,9 +9,16 @@ const updateSchema = z.object({
   dateReleased: z.string().optional(),
   routingNumber: z.string().optional(),
   documentTitle: z.string().optional(),
+  documentType: z.string().nullable().optional(),
   instructions: z.string().nullable().optional(),
+  // Receipt acknowledgement is normally filled in here rather than at creation:
+  // the document is logged when it leaves, and comes back signed for later.
+  receivingOffice: z.string().nullable().optional(),
   receivedBy: z.string().nullable().optional(),
+  receivedDate: z.string().nullable().optional(),
+  receivedTime: z.string().nullable().optional(),
   relatedIncomingId: z.string().nullable().optional(),
+  activityIds: z.array(z.string()).optional(),
   progressRemarks: z.string().nullable().optional(),
   scannedCopyUrl: z.string().nullable().optional(),
   filed: z.boolean().optional(),
@@ -47,14 +54,39 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     }
   }
 
-  const { dateReleased, ...rest } = parsed.data;
+  const { dateReleased, receivedDate, activityIds: rawActivityIds, ...rest } = parsed.data;
 
-  const doc = await prisma.outgoingDocument.update({
-    where: { id: existing.id },
-    data: {
-      ...rest,
-      dateReleased: dateReleased ? new Date(dateReleased) : undefined,
-    },
+  // Office-scoped, as on create.
+  const activityIds = rawActivityIds ? [...new Set(rawActivityIds)] : undefined;
+  if (activityIds && activityIds.length > 0) {
+    const ok = await prisma.activity.count({
+      where: { id: { in: activityIds }, officeId: session.user.officeId },
+    });
+    if (ok !== activityIds.length) {
+      return NextResponse.json({ error: "Invalid activityIds" }, { status: 400 });
+    }
+  }
+
+  const doc = await prisma.$transaction(async (tx) => {
+    // Replace the whole link set rather than diffing it — the form always
+    // submits the complete selection, and an empty array must be able to mean
+    // "unlink everything". An absent key still means "leave alone".
+    if (activityIds) {
+      await tx.outgoingDocumentActivity.deleteMany({ where: { outgoingId: existing.id } });
+    }
+
+    return tx.outgoingDocument.update({
+      where: { id: existing.id },
+      data: {
+        ...rest,
+        dateReleased: dateReleased ? new Date(dateReleased) : undefined,
+        // Distinguish the three cases: absent means "don't touch", explicit null
+        // clears a receipt recorded in error, and a string sets it.
+        receivedDate:
+          receivedDate === undefined ? undefined : receivedDate === null || receivedDate === "" ? null : new Date(receivedDate),
+        ...(activityIds ? { linkedActivities: { create: activityIds.map((activityId) => ({ activityId })) } } : {}),
+      },
+    });
   });
 
   await logAudit({
@@ -89,7 +121,12 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await prisma.outgoingDocument.delete({ where: { id: existing.id } });
+  // Link rows first — the FK is RESTRICT, so a linked document cannot be
+  // deleted while they exist. Mirrors the incoming route's delete.
+  await prisma.$transaction([
+    prisma.outgoingDocumentActivity.deleteMany({ where: { outgoingId: existing.id } }),
+    prisma.outgoingDocument.delete({ where: { id: existing.id } }),
+  ]);
 
   await logAudit({
     ipAddress: getClientIp(req),

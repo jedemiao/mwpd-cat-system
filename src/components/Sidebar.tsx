@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   GridIcon,
   InboxIcon,
@@ -21,6 +21,9 @@ type NavItem = {
   label: string;
   icon: React.ReactNode;
   badge?: { count: number; tone: "danger" | "warning" } | null;
+  /** Rendered indented beneath the parent. Used for the Internal/External split
+   *  of Incoming, which is one page filtered two ways rather than two routes. */
+  children?: { href: string; label: string }[];
 };
 
 export function Sidebar({
@@ -36,6 +39,9 @@ export function Sidebar({
   officeCode: string;
 }) {
   const pathname = usePathname();
+  // Internal and External are the same route distinguished only by ?origin, so
+  // highlighting the right sub-entry needs the query string, not just the path.
+  const currentOrigin = useSearchParams().get("origin") ?? "";
   const [collapsed, setCollapsed] = useState(false);
 
   // Same truncation the outgoing routing prefix uses (src/lib/documentTypeCodes.ts):
@@ -50,6 +56,15 @@ export function Sidebar({
       label: "Incoming",
       icon: <InboxIcon className="h-[18px] w-[18px]" />,
       badge: overdue > 0 ? { count: overdue, tone: "danger" } : dueSoon > 0 ? { count: dueSoon, tone: "warning" } : null,
+      // The office keeps internal and external as two separate ledgers, each
+      // with its own numbering run, and reaches them as two nav items. These
+      // are the same route with the source preset rather than duplicated pages
+      // — per the adoption plan's "column plus a filter, not a second page" —
+      // but they are presented as the two destinations staff actually think in.
+      children: [
+        { href: "/incoming?origin=INTERNAL", label: "Internal" },
+        { href: "/incoming?origin=EXTERNAL", label: "External" },
+      ],
     },
     { href: "/outgoing", label: "Outgoing", icon: <SendIcon className="h-[18px] w-[18px]" /> },
     { href: "/activities", label: "Monthly activity", icon: <ClipboardListIcon className="h-[18px] w-[18px]" /> },
@@ -82,8 +97,8 @@ export function Sidebar({
         {items.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
+            <div key={item.href}>
             <Link
-              key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
               className={`relative flex items-center border-l-2 py-2 text-sm transition-colors ${
@@ -113,6 +128,28 @@ export function Sidebar({
                 </span>
               )}
             </Link>
+
+            {/* Sub-entries are hidden when collapsed — at 68px there is no room
+                for a second level, and the parent icon still reaches the page. */}
+            {!collapsed &&
+              item.children?.map((child) => {
+                const childOrigin = child.href.split("origin=")[1];
+                const childActive = pathname === item.href && currentOrigin === childOrigin;
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    className={`flex items-center border-l-2 py-1.5 pl-12 pr-3 text-[13px] transition-colors ${
+                      childActive
+                        ? "border-white bg-white/10 text-white"
+                        : "border-transparent text-white/55 hover:bg-white/5 hover:text-white/90"
+                    }`}
+                  >
+                    {child.label}
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </nav>

@@ -80,12 +80,34 @@ model Office {
   // second mistake is the one anybody would notice.
   tracksArta Boolean @default(false)
 
+  // Whether the incoming and outgoing ledgers render this office's full
+  // register layout, copied column-for-column from MWPSD's own tracker.
+  // Everyone else keeps the compact ledgers, which fit a printed sheet where
+  // the register layouts do not.
+  //
+  // One flag covers both ledgers rather than one per module: an office reads
+  // its registers one way or the other, and a per-module split would let them
+  // drift apart for no reason anybody could explain later.
+  //
+  // This is the one place two offices see genuinely different table layouts, so
+  // a change to either ledger has to be made in both branches. Requested by
+  // MWPSD, who read their registers by column position.
+  detailedLedgerColumns Boolean @default(false)
+
   // Monotonic counters for auto-generated routing numbers — a live count()
   // would reuse numbers after a delete, colliding with the unique
   // constraint on routingNumber. Separate per module: Incoming and
   // Outgoing number independently in the source tracker.
-  incomingSeqCounter Int @default(0)
-  outgoingSeqCounter Int @default(0)
+  //
+  // incomingSeqCounter numbers EXTERNAL incoming only. Internal incoming has
+  // its own run, because the office treats the two as separate ledgers and
+  // expects each to count from 001. The two can never collide despite both
+  // starting at 1: external numbers are date-led (`081126-M-014`) and internal
+  // ones type-led (`MOM-06-2026`), so the formats are structurally distinct —
+  // see src/lib/documentTypeCodes.ts.
+  incomingSeqCounter         Int @default(0)
+  incomingInternalSeqCounter Int @default(0)
+  outgoingSeqCounter         Int @default(0)
 
   users         User[]
   incoming      IncomingDocument[]
@@ -146,6 +168,11 @@ model IncomingDocument {
   // previously only consumed to build routingNumber and then thrown away,
   // which left the ledger unable to answer "show me every advisory".
   documentType     String?
+  // Free-text specification, used only when documentType == "O" (Others).
+  // Required at the point of selection rather than optional — unlike
+  // Activity.categoryOther, "Others" here is a deliberate pick from the legend
+  // and never a default, so an unexplained one would say nothing at all.
+  documentTypeOther String?
   routingNumber    String        @unique // e.g. 070126-L-008
   documentTitle    String
   routedTo         IncomingRoutedStaff[]         // Division Chief may route to more than one staff member
@@ -181,6 +208,19 @@ model IncomingDocumentActivity {
   @@id([incomingId, activityId])
 }
 
+// The outgoing-side counterpart, same shape. The office's own outgoing register
+// offers "Link to Tentative Activity(s) (optional, can select more than one)",
+// so a dispatch — a terminal report, an invitation letter — can name the job
+// fair or seminar it belongs to.
+model OutgoingDocumentActivity {
+  outgoingId String
+  outgoing   OutgoingDocument @relation(fields: [outgoingId], references: [id])
+  activityId String
+  activity   Activity         @relation(fields: [activityId], references: [id])
+
+  @@id([outgoingId, activityId])
+}
+
 model OutgoingDocument {
   id                 String            @id @default(cuid())
   officeId           String
@@ -188,15 +228,32 @@ model OutgoingDocument {
 
   dateReleased       DateTime
   routingNumber      String            @unique // e.g. 070226-MWPTD-DC-004
+  // Type code from src/lib/documentTypeCodes.ts, stored so the ledger can be
+  // filtered by type — the incoming side already does this.
+  documentType       String?
+  // See IncomingDocument.documentTypeOther — same rule.
+  documentTypeOther  String?
   documentTitle      String
   instructions       String?
-  receivedBy         String?           // next office/person, free text
+
+  // Receipt acknowledgement: who took delivery, where, and when. The office's
+  // own outgoing register records all four, and they are how it answers "did
+  // this actually reach them?" — a released document with no receipt is the
+  // thing a clerk chases. All nullable: a document is logged when it leaves,
+  // and the receipt comes back later, if at all.
+  receivingOffice    String?           // recipient division/office — "PROTECTION", "FAD", "ORD"
+  receivedBy         String?           // person who took delivery, free text
+  receivedDate       DateTime?         // date the recipient acknowledged it
+  receivedTime       String?           // "10:54 PM" — clock time, same shape as IncomingDocument.timeReceived
+
   progressRemarks    String?
   scannedCopyUrl     String?
   filed              Boolean           @default(false)
 
   relatedIncomingId  String?
   relatedIncoming    IncomingDocument? @relation(fields: [relatedIncomingId], references: [id])
+
+  linkedActivities   OutgoingDocumentActivity[]  // the activities this dispatch concerns
 
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -227,6 +284,7 @@ model Activity {
 
   assignees         ActivityAssignee[]
   linkedIncoming    IncomingDocumentActivity[]
+  linkedOutgoing    OutgoingDocumentActivity[]
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }

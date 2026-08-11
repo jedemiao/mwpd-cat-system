@@ -9,6 +9,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import { DOCUMENT_TYPE_OTHER_CODE, documentTypeLabel } from "@/lib/documentTypeCodes";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -49,16 +50,18 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
     prisma.outgoingDocument.findMany({
       where,
       orderBy: { dateReleased: "desc" },
-      include: { relatedIncoming: { select: { routingNumber: true } } },
       skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
       take: isPrint ? PRINT_MAX : PAGE_SIZE,
     }),
     prisma.outgoingDocument.count({ where }),
-    isPrint ? prisma.office.findUnique({ where: { id: officeId }, select: { name: true } }) : Promise.resolve(null),
+    // name is only needed for the printed letterhead, but detailedLedgerColumns
+    // decides which layout renders, so this now runs on every load.
+    prisma.office.findUnique({ where: { id: officeId }, select: { name: true, detailedLedgerColumns: true } }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const backHref = listHref("/outgoing", { q, status: status !== "all" ? status : undefined });
+  const detailedColumns = office?.detailedLedgerColumns ?? false;
 
   return (
     <main className="space-y-4 p-6 lg:p-8">
@@ -116,25 +119,65 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
       <div className="card overflow-x-auto">
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Date released</th>
-              <th>Routing number</th>
-              <th>Document title</th>
-              <th>Answers incoming #</th>
-              <th>Received by</th>
-              <th>Status</th>
-              <th>Scanned copy</th>
-              <th className="print:hidden"></th>
-            </tr>
+            {/* Two layouts, same as the incoming ledger and gated on the same
+                flag. The register layout follows the office's own outgoing
+                register (mwpsd_tracker/…view_outgoing_internal.php.png), whose
+                last four columns are the receipt: which office took delivery,
+                who signed, and when. "Answers incoming #" and Status are ours
+                and have no counterpart there, but they carry the cross-ledger
+                link and filing state, so they stay. */}
+            {detailedColumns ? (
+              <tr>
+                <th>Date</th>
+                <th>Tracking No.</th>
+                <th>Type of Document</th>
+                <th>Particulars</th>
+                <th>Office</th>
+                <th>Name</th>
+                <th>Date Received</th>
+                <th>Time</th>
+                <th>Status</th>
+                <th>Scanned copy</th>
+                <th className="print:hidden"></th>
+              </tr>
+            ) : (
+              <tr>
+                <th>Date released</th>
+                <th>Routing number</th>
+                <th>Document title</th>
+                <th>Received by</th>
+                <th>Status</th>
+                <th>Scanned copy</th>
+                <th className="print:hidden"></th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {docs.map((doc) => (
               <tr key={doc.id}>
-                <td className="whitespace-nowrap">{doc.dateReleased.toLocaleDateString()}</td>
-                <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
-                <td>{doc.documentTitle}</td>
-                <td className="whitespace-nowrap font-mono text-xs">{doc.relatedIncoming?.routingNumber ?? "—"}</td>
-                <td>{doc.receivedBy ?? "—"}</td>
+                {detailedColumns ? (
+                  <>
+                    <td className="whitespace-nowrap">{doc.dateReleased.toLocaleDateString()}</td>
+                    <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
+                    <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
+                      {doc.documentType === DOCUMENT_TYPE_OTHER_CODE
+                        ? doc.documentTypeOther || DOCUMENT_TYPE_OTHER_CODE
+                        : (doc.documentType ?? "—")}
+                    </td>
+                    <td>{doc.documentTitle}</td>
+                    <td className="whitespace-nowrap">{doc.receivingOffice ?? "—"}</td>
+                    <td className="whitespace-nowrap">{doc.receivedBy ?? "—"}</td>
+                    <td className="whitespace-nowrap">{doc.receivedDate?.toLocaleDateString() ?? "—"}</td>
+                    <td className="whitespace-nowrap text-xs">{doc.receivedTime ?? "—"}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="whitespace-nowrap">{doc.dateReleased.toLocaleDateString()}</td>
+                    <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
+                    <td>{doc.documentTitle}</td>
+                  </>
+                )}
+                {!detailedColumns && <td>{doc.receivedBy ?? "—"}</td>}
                 <td className="whitespace-nowrap">
                   {doc.filed ? <Badge variant="success">Filed</Badge> : <Badge variant="warning">Pending</Badge>}
                 </td>

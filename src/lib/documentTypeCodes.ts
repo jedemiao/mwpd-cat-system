@@ -24,7 +24,22 @@ export const DOCUMENT_TYPE_CODES = [
   // MOM-06-2026) but missing from the original legend.
   { code: "MO", label: "Memorandum Order" },
   { code: "MOM", label: "Minutes of Meeting" },
+  // Escape hatch for a type the legend does not name. Deliberately last in the
+  // list, and unlike Activity's OTHERS it is never a default — picking it is a
+  // choice, so the accompanying free text (documentTypeOther) is required, the
+  // same rule Leave.typeOther follows.
+  { code: "O", label: "Others" },
 ] as const;
+
+/** The code whose selection requires a free-text specification. */
+export const DOCUMENT_TYPE_OTHER_CODE = "O";
+
+/** Label for display: the typed specification when "Others", else the legend label. */
+export function documentTypeLabel(code: string | null, other: string | null): string {
+  if (!code) return "—";
+  if (code === DOCUMENT_TYPE_OTHER_CODE && other) return other;
+  return DOCUMENT_TYPE_LABELS[code] ?? code;
+}
 
 export type DocumentTypeCode = (typeof DOCUMENT_TYPE_CODES)[number]["code"];
 
@@ -42,9 +57,24 @@ export function formatRoutingDate(date: Date): string {
   return `${mm}${dd}${yy}`;
 }
 
-// Incoming: MMDDYY-TYPE-###
+// Incoming (EXTERNAL): MMDDYY-TYPE-###
 export function buildRoutingNumber(date: Date, type: DocumentTypeCode, seq: number): string {
   return `${formatRoutingDate(date)}-${type}-${String(seq).padStart(3, "0")}`;
+}
+
+// Incoming (INTERNAL): TYPE-NN-YYYY — e.g. "MOM-06-2026". Deliberately a
+// different shape from the external format above, copied from the office's own
+// internal ledger.
+//
+// The difference is load-bearing, not cosmetic. Internal and external documents
+// draw on separate counters (Office.incomingInternalSeqCounter vs
+// incomingSeqCounter), so both runs pass through 001 — and routingNumber is
+// unique across the whole table. These two formats can never produce the same
+// string because an external number always begins with six digits and an
+// internal one always begins with a letter. Keep that property if either format
+// is ever changed.
+export function buildInternalRoutingNumber(date: Date, type: DocumentTypeCode, seq: number): string {
+  return `${type}-${String(seq).padStart(2, "0")}-${date.getUTCFullYear()}`;
 }
 
 // Outgoing: MMDDYY-<office prefix>-TYPE-### — office prefix is the office's

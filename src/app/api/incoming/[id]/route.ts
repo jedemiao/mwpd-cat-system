@@ -17,6 +17,7 @@ const updateSchema = z.object({
     .or(z.literal("")),
   routingNumber: z.string().optional(),
   documentType: z.string().nullable().optional(),
+  documentTypeOther: z.string().nullable().optional(),
   documentTitle: z.string().optional(),
   origin: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   receivedById: z.string().nullable().optional().or(z.literal("")),

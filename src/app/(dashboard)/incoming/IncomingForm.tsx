@@ -3,10 +3,13 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUploadField } from "@/components/FileUploadField";
-import { DOCUMENT_TYPE_CODES, type DocumentTypeCode } from "@/lib/documentTypeCodes";
+import {
+  DOCUMENT_TYPE_CODES,
+  DOCUMENT_TYPE_OTHER_CODE,
+  type DocumentTypeCode,
+} from "@/lib/documentTypeCodes";
 
 type Option = { id: string; name: string };
-type ActivityOption = { id: string; label: string };
 type Complexity = "SIMPLE" | "COMPLEX" | "HIGHLY_TECHNICAL";
 type Origin = "INTERNAL" | "EXTERNAL";
 
@@ -14,7 +17,6 @@ type IncomingFormProps = {
   mode: "create" | "edit";
   id?: string;
   users: Option[];
-  activities: ActivityOption[];
   // Values already typed into these fields elsewhere in the office, offered as
   // datalist suggestions. The source tracker builds its filter dropdowns the
   // same way — from what has been entered before, not a maintained table.
@@ -30,10 +32,10 @@ type IncomingFormProps = {
     originAgency?: string;
     signatory?: string;
     documentType?: string;
+    documentTypeOther?: string;
     routingNumber?: string;
     documentTitle?: string;
     routedToIds?: string[];
-    activityIds?: string[];
     instructions?: string;
     complexity?: Complexity;
     numCorrections?: number;
@@ -61,7 +63,6 @@ export function IncomingForm({
   mode,
   id,
   users,
-  activities,
   agencySuggestions,
   signatorySuggestions,
   currentUserId,
@@ -76,16 +77,17 @@ export function IncomingForm({
   const [receivedById, setReceivedById] = useState(
     initialData?.receivedById ?? (mode === "create" ? currentUserId : ""),
   );
-  const [origin, setOrigin] = useState<Origin>(initialData?.origin ?? "EXTERNAL");
+  // Set by the ledger being logged into, never edited in the form.
+  const origin: Origin = initialData?.origin ?? "EXTERNAL";
   const [originAgency, setOriginAgency] = useState(initialData?.originAgency ?? "");
   const [signatory, setSignatory] = useState(initialData?.signatory ?? "");
   const [routingNumber, setRoutingNumber] = useState(initialData?.routingNumber ?? "");
   const [documentType, setDocumentType] = useState<DocumentTypeCode>(
     (initialData?.documentType as DocumentTypeCode) ?? "L",
   );
+  const [documentTypeOther, setDocumentTypeOther] = useState(initialData?.documentTypeOther ?? "");
   const [documentTitle, setDocumentTitle] = useState(initialData?.documentTitle ?? "");
   const [routedToIds, setRoutedToIds] = useState<string[]>(initialData?.routedToIds ?? []);
-  const [activityIds, setActivityIds] = useState<string[]>(initialData?.activityIds ?? []);
   const [instructions, setInstructions] = useState(initialData?.instructions ?? "");
   const [complexity, setComplexity] = useState<Complexity>(initialData?.complexity ?? "SIMPLE");
   const [numCorrections, setNumCorrections] = useState(initialData?.numCorrections ?? 0);
@@ -102,10 +104,6 @@ export function IncomingForm({
     setRoutedToIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   }
 
-  function toggleActivity(activityId: string) {
-    setActivityIds((prev) => (prev.includes(activityId) ? prev.filter((a) => a !== activityId) : [...prev, activityId]));
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -117,14 +115,18 @@ export function IncomingForm({
       origin,
       originAgency: originAgency || undefined,
       signatory: signatory || undefined,
-      activityIds,
     };
+
+    // Only sent alongside "Others"; switching away from it clears the text
+    // rather than leaving a stale specification attached to a named type.
+    const typeOtherDetail = documentType === DOCUMENT_TYPE_OTHER_CODE ? documentTypeOther.trim() : "";
 
     const body =
       mode === "create"
         ? {
             dateReceived,
             documentType,
+            documentTypeOther: typeOtherDetail || undefined,
             documentTitle,
             ...intake,
             notes: notes || undefined,
@@ -140,6 +142,7 @@ export function IncomingForm({
             dateReceived,
             routingNumber,
             documentType,
+            documentTypeOther: typeOtherDetail || null,
             documentTitle,
             ...intake,
             originAgency: originAgency || null,
@@ -226,16 +229,12 @@ export function IncomingForm({
         </div>
       </div>
 
+      {/* Source is no longer chosen here. It comes from the ledger the document
+          is being logged into — /incoming/new?origin=… — which is also what
+          decides its numbering format, so an editable field could only ever
+          disagree with the ledger the clerk is standing in. It is still sent
+          with the payload, just never typed. */}
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass} htmlFor="origin">
-            Source
-          </label>
-          <select id="origin" value={origin} onChange={(e) => setOrigin(e.target.value as Origin)} className={inputClass}>
-            <option value="EXTERNAL">External — outside DMW</option>
-            <option value="INTERNAL">Internal — within DMW</option>
-          </select>
-        </div>
         <div>
           <label className={labelClass} htmlFor="documentType">
             Document type
@@ -252,6 +251,25 @@ export function IncomingForm({
               </option>
             ))}
           </select>
+          {/* Revealed only on Others, and required there — same rule as
+              LeaveForm's "Please specify". */}
+          {documentType === DOCUMENT_TYPE_OTHER_CODE && (
+            <div className="mt-3">
+              <label className={labelClass} htmlFor="documentTypeOther">
+                Please specify
+              </label>
+              <input
+                id="documentTypeOther"
+                type="text"
+                required
+                maxLength={100}
+                placeholder="e.g. Terminal Report, Accomplishment Report…"
+                value={documentTypeOther}
+                onChange={(e) => setDocumentTypeOther(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          )}
           {mode === "create" && (
             <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
               Routing number is generated automatically from the date received, type, and next sequence number.
@@ -332,29 +350,6 @@ export function IncomingForm({
           onChange={(e) => setDocumentTitle(e.target.value)}
           className={inputClass}
         />
-      </div>
-
-      <div>
-        <span className={labelClass}>
-          Related activities <span className="normal-case text-ink-400 dark:text-white/30">(optional)</span>
-        </span>
-        {activities.length === 0 ? (
-          <p className={readOnlyClass}>No activities logged yet.</p>
-        ) : (
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-ink-400/30 p-3 dark:border-white/15">
-            {activities.map((a) => (
-              <label key={a.id} className="flex items-start gap-2 text-sm text-ink-700 dark:text-white/70">
-                <input
-                  type="checkbox"
-                  className="field-checkbox mt-0.5"
-                  checked={activityIds.includes(a.id)}
-                  onChange={() => toggleActivity(a.id)}
-                />
-                {a.label}
-              </label>
-            ))}
-          </div>
-        )}
       </div>
 
       <div>

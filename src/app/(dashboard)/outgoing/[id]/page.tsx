@@ -5,22 +5,31 @@ import { prisma } from "@/lib/prisma";
 import { toDateInputValue } from "@/lib/formatDateInput";
 import { canDelete } from "@/lib/authz";
 import { DeleteButton } from "@/components/DeleteButton";
+import { getLinkableActivities } from "@/lib/linkableActivities";
 import { OutgoingForm } from "../OutgoingForm";
 
 export default async function EditOutgoingPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getServerSession(authOptions);
 
-  const [doc, incomingDocs] = await Promise.all([
-    prisma.outgoingDocument.findFirst({ where: { id: params.id, officeId: session!.user.officeId } }),
-    prisma.incomingDocument.findMany({
-      where: { officeId: session!.user.officeId },
-      orderBy: { dateReceived: "desc" },
-      select: { id: true, routingNumber: true, documentTitle: true },
+  const [doc, office] = await Promise.all([
+    prisma.outgoingDocument.findFirst({
+      where: { id: params.id, officeId: session!.user.officeId },
+      include: { linkedActivities: { select: { activityId: true } } },
+    }),
+    prisma.office.findUnique({
+      where: { id: session!.user.officeId },
+      select: { detailedLedgerColumns: true },
     }),
   ]);
 
   if (!doc) notFound();
+
+  const registerStyle = office?.detailedLedgerColumns ?? false;
+  const linkedActivityIds = doc.linkedActivities.map((l) => l.activityId);
+  const activities = registerStyle
+    ? await getLinkableActivities(session!.user.officeId, linkedActivityIds)
+    : [];
 
   return (
     <main className="p-6 lg:p-8">
@@ -28,17 +37,22 @@ export default async function EditOutgoingPage(props: { params: Promise<{ id: st
       <OutgoingForm
         mode="edit"
         id={doc.id}
-        incomingDocs={incomingDocs}
+        registerStyle={registerStyle}
+        activities={activities}
         initialData={{
           dateReleased: toDateInputValue(doc.dateReleased),
           routingNumber: doc.routingNumber,
+          documentTypeOther: doc.documentTypeOther ?? "",
           documentTitle: doc.documentTitle,
           instructions: doc.instructions ?? "",
+          receivingOffice: doc.receivingOffice ?? "",
           receivedBy: doc.receivedBy ?? "",
-          relatedIncomingId: doc.relatedIncomingId ?? "",
+          receivedDate: doc.receivedDate ? toDateInputValue(doc.receivedDate) : "",
+          receivedTime: doc.receivedTime ?? "",
           progressRemarks: doc.progressRemarks ?? "",
           scannedCopyUrl: doc.scannedCopyUrl ?? "",
           filed: doc.filed,
+          activityIds: linkedActivityIds,
         }}
       />
       {canDelete(session!.user.role) && <DeleteButton endpoint={`/api/outgoing/${doc.id}`} redirectTo="/outgoing" />}

@@ -16,17 +16,13 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
     where: { id: params.id, officeId: session!.user.officeId },
     include: {
       routedTo: { select: { userId: true } },
-      linkedActivities: { select: { activityId: true } },
     },
   });
 
   if (!doc) notFound();
 
-  // Fetched after the document so already-linked activities can be merged into
-  // the picker even when they fall outside the recent window.
-  const { users, activities, agencySuggestions, signatorySuggestions } = await getIncomingFormData(
+  const { users, agencySuggestions, signatorySuggestions } = await getIncomingFormData(
     session!.user.officeId,
-    doc.linkedActivities.map((l) => l.activityId),
   );
 
   return (
@@ -36,7 +32,6 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
         mode="edit"
         id={doc.id}
         users={users}
-        activities={activities}
         agencySuggestions={agencySuggestions}
         signatorySuggestions={signatorySuggestions}
         currentUserId={session!.user.id}
@@ -49,10 +44,10 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
           originAgency: doc.originAgency ?? "",
           signatory: doc.signatory ?? "",
           documentType: doc.documentType ?? undefined,
+          documentTypeOther: doc.documentTypeOther ?? "",
           routingNumber: doc.routingNumber,
           documentTitle: doc.documentTitle,
           routedToIds: doc.routedTo.map((r) => r.userId),
-          activityIds: doc.linkedActivities.map((l) => l.activityId),
           instructions: doc.instructions ?? "",
           complexity: doc.complexity,
           numCorrections: doc.numCorrections,

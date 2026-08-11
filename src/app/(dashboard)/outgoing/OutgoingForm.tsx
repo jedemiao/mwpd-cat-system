@@ -3,44 +3,85 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUploadField } from "@/components/FileUploadField";
-import { DOCUMENT_TYPE_CODES, type DocumentTypeCode } from "@/lib/documentTypeCodes";
+import {
+  DOCUMENT_TYPE_CODES,
+  DOCUMENT_TYPE_OTHER_CODE,
+  type DocumentTypeCode,
+} from "@/lib/documentTypeCodes";
 
-type IncomingOption = { id: string; routingNumber: string; documentTitle: string };
 
 type OutgoingFormProps = {
   mode: "create" | "edit";
   id?: string;
-  incomingDocs: IncomingOption[];
+  /**
+   * Offices keeping their own register enter documents the way their tracker
+   * does: the tracking number is typed rather than generated, "Particulars"
+   * rather than "Document title", Remarks captured at entry, and no
+   * Instruction field — their form has none.
+   */
+  registerStyle?: boolean;
+  /** Recent activities offered by the register-style activity picker. */
+  activities?: ActivityOption[];
   initialData?: {
     dateReleased?: string;
     routingNumber?: string;
+    documentTypeOther?: string;
     documentTitle?: string;
     instructions?: string;
+    receivingOffice?: string;
     receivedBy?: string;
-    relatedIncomingId?: string;
+    receivedDate?: string;
+    receivedTime?: string;
     progressRemarks?: string;
     scannedCopyUrl?: string;
     filed?: boolean;
+    activityIds?: string[];
   };
 };
 
 const inputClass = "field-input";
 const labelClass = "field-label";
+const readOnlyClass =
+  "rounded-md border border-ink-400/20 bg-surface px-3 py-2 text-sm text-ink-500 dark:border-white/10 dark:bg-ink-900 dark:text-white/40";
 
-export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFormProps) {
+type ActivityOption = { id: string; label: string };
+
+export function OutgoingForm({
+  mode,
+  id,
+  initialData,
+  registerStyle = false,
+  activities = [],
+}: OutgoingFormProps) {
   const router = useRouter();
   const [dateReleased, setDateReleased] = useState(initialData?.dateReleased ?? "");
   const [routingNumber, setRoutingNumber] = useState(initialData?.routingNumber ?? "");
   const [documentType, setDocumentType] = useState<DocumentTypeCode>("L");
+  const [documentTypeOther, setDocumentTypeOther] = useState(initialData?.documentTypeOther ?? "");
   const [documentTitle, setDocumentTitle] = useState(initialData?.documentTitle ?? "");
   const [instructions, setInstructions] = useState(initialData?.instructions ?? "");
+  const [receivingOffice, setReceivingOffice] = useState(initialData?.receivingOffice ?? "");
   const [receivedBy, setReceivedBy] = useState(initialData?.receivedBy ?? "");
-  const [relatedIncomingId, setRelatedIncomingId] = useState(initialData?.relatedIncomingId ?? "");
+  const [receivedDate, setReceivedDate] = useState(initialData?.receivedDate ?? "");
+  const [receivedTime, setReceivedTime] = useState(initialData?.receivedTime ?? "");
   const [progressRemarks, setProgressRemarks] = useState(initialData?.progressRemarks ?? "");
   const [scannedCopyUrl, setScannedCopyUrl] = useState(initialData?.scannedCopyUrl ?? "");
   const [filed, setFiled] = useState(initialData?.filed ?? false);
+  const [activityIds, setActivityIds] = useState<string[]>(initialData?.activityIds ?? []);
+  const [activityQuery, setActivityQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function toggleActivity(activityId: string) {
+    setActivityIds((prev) => (prev.includes(activityId) ? prev.filter((a) => a !== activityId) : [...prev, activityId]));
+  }
+
+  // A ticked activity always stays listed, even when it doesn't match the
+  // search — otherwise filtering could hide a selection the clerk has made and
+  // they would submit without seeing it.
+  const visibleActivities = activities.filter(
+    (a) => activityIds.includes(a.id) || a.label.toLowerCase().includes(activityQuery.trim().toLowerCase()),
+  );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -51,20 +92,34 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
       mode === "create"
         ? {
             dateReleased,
+            // Only sent when the office types its own; otherwise the API
+            // generates one. Never send an empty string — that would fail
+            // validation rather than falling back to generation.
+            ...(registerStyle && routingNumber.trim() ? { routingNumber: routingNumber.trim() } : {}),
             documentType,
+            documentTypeOther:
+              documentType === DOCUMENT_TYPE_OTHER_CODE ? documentTypeOther.trim() || undefined : undefined,
             documentTitle,
             instructions: instructions || undefined,
+            ...(registerStyle ? { progressRemarks: progressRemarks || undefined, activityIds } : {}),
+            receivingOffice: receivingOffice || undefined,
             receivedBy: receivedBy || undefined,
-            relatedIncomingId: relatedIncomingId || undefined,
+            receivedDate: receivedDate || undefined,
+            receivedTime: receivedTime || undefined,
           }
         : {
             dateReleased,
             routingNumber,
             documentTitle,
             instructions: instructions || null,
+            receivingOffice: receivingOffice || null,
             receivedBy: receivedBy || null,
-            relatedIncomingId: relatedIncomingId || null,
+            receivedDate: receivedDate || null,
+            receivedTime: receivedTime || null,
             progressRemarks: progressRemarks || null,
+            // Sent only where the picker exists; elsewhere the key is absent so
+            // the API leaves any existing links alone rather than clearing them.
+            ...(registerStyle ? { activityIds } : {}),
             scannedCopyUrl: scannedCopyUrl || null,
             filed,
           };
@@ -107,7 +162,7 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
           {mode === "create" ? (
             <>
               <label className={labelClass} htmlFor="documentType">
-                Document type
+                {registerStyle ? "Type of Document" : "Document type"}
               </label>
               <select
                 id="documentType"
@@ -121,9 +176,31 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
-                Routing number is generated automatically from the date released, type, and next sequence number.
-              </p>
+              {!registerStyle && (
+                <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+                  Routing number is generated automatically from the date released, type, and next sequence number.
+                </p>
+              )}
+              {/* Same shape as LeaveForm's "Please specify": revealed only on
+                  Others, and required there — an unexplained "Others" records
+                  nothing the legend didn't already fail to describe. */}
+              {documentType === DOCUMENT_TYPE_OTHER_CODE && (
+                <div className="mt-3">
+                  <label className={labelClass} htmlFor="documentTypeOther">
+                    Please specify
+                  </label>
+                  <input
+                    id="documentTypeOther"
+                    type="text"
+                    required
+                    maxLength={100}
+                    placeholder="e.g. Terminal Report, Accomplishment Report…"
+                    value={documentTypeOther}
+                    onChange={(e) => setDocumentTypeOther(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -143,64 +220,187 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
         </div>
       </div>
 
+      {/* Typed here rather than generated, as the office's own register does.
+          It is unique across the whole table, so a repeat is refused by the API
+          with the number named in the message. */}
+      {registerStyle && mode === "create" && (
+        <div>
+          <label className={labelClass} htmlFor="routingNumber">
+            Tracking No.
+          </label>
+          <input
+            id="routingNumber"
+            type="text"
+            required
+            value={routingNumber}
+            onChange={(e) => setRoutingNumber(e.target.value)}
+            placeholder="e.g. PSD-2026-08-389"
+            className={inputClass}
+          />
+        </div>
+      )}
+
       <div>
         <label className={labelClass} htmlFor="documentTitle">
-          Document title / subject
+          {registerStyle ? "Particulars" : "Document title / subject"}
         </label>
-        <input
-          id="documentTitle"
-          type="text"
-          required
-          value={documentTitle}
-          onChange={(e) => setDocumentTitle(e.target.value)}
-          className={inputClass}
-        />
+        {registerStyle ? (
+          <textarea
+            id="documentTitle"
+            required
+            rows={3}
+            value={documentTitle}
+            onChange={(e) => setDocumentTitle(e.target.value)}
+            className={inputClass}
+          />
+        ) : (
+          <input
+            id="documentTitle"
+            type="text"
+            required
+            value={documentTitle}
+            onChange={(e) => setDocumentTitle(e.target.value)}
+            className={inputClass}
+          />
+        )}
       </div>
 
-      <div>
-        <label className={labelClass} htmlFor="relatedIncomingId">
-          Answers incoming request
-        </label>
-        <select
-          id="relatedIncomingId"
-          value={relatedIncomingId}
-          onChange={(e) => setRelatedIncomingId(e.target.value)}
-          className={inputClass}
-        >
-          <option value="">— None —</option>
-          {incomingDocs.map((doc) => (
-            <option key={doc.id} value={doc.id}>
-              {doc.routingNumber} — {doc.documentTitle}
-            </option>
-          ))}
-        </select>
+
+      {/* Their entry form has no Instruction field — Remarks below covers it. */}
+      {!registerStyle && (
+        <div>
+          <label className={labelClass} htmlFor="instructions">
+            Instruction / required actions
+          </label>
+          <textarea
+            id="instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            className={inputClass}
+            rows={2}
+          />
+        </div>
+      )}
+
+      {/* Receipt acknowledgement — kept together because they are filled in as
+          one act, usually days after the document was logged: the recipient
+          signs, and the clerk records who took it, for which office, and when.
+          A released document with no receipt is exactly what gets chased. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClass} htmlFor="receivingOffice">
+            Office
+          </label>
+          <input
+            id="receivingOffice"
+            type="text"
+            value={receivingOffice}
+            onChange={(e) => setReceivingOffice(e.target.value)}
+            placeholder="PROTECTION, FAD, ORD…"
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="receivedBy">
+            Received by
+          </label>
+          <input
+            id="receivedBy"
+            type="text"
+            value={receivedBy}
+            onChange={(e) => setReceivedBy(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="receivedDate">
+            Date received
+          </label>
+          <input
+            id="receivedDate"
+            type="date"
+            value={receivedDate}
+            onChange={(e) => setReceivedDate(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="receivedTime">
+            Time received
+          </label>
+          <input
+            id="receivedTime"
+            type="time"
+            value={receivedTime}
+            onChange={(e) => setReceivedTime(e.target.value)}
+            className={inputClass}
+          />
+        </div>
       </div>
 
-      <div>
-        <label className={labelClass} htmlFor="instructions">
-          Instruction / required actions
-        </label>
-        <textarea
-          id="instructions"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          className={inputClass}
-          rows={2}
-        />
-      </div>
+      {/* "Link to Tentative Activity(s) (optional, can select more than one)".
+          Their control is a type-ahead over everything; this filters a bounded
+          recent list instead, which needs no search endpoint and cannot leave a
+          selection stranded off-list — anything already ticked stays visible
+          because the filter only hides unticked rows. */}
+      {registerStyle && (
+        <div>
+          <span className={labelClass}>
+            Link to Tentative Activity(s){" "}
+            <span className="normal-case text-ink-400 dark:text-white/30">(optional, can select more than one)</span>
+          </span>
+          {activities.length === 0 ? (
+            <p className={readOnlyClass}>No activities logged yet.</p>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={activityQuery}
+                onChange={(e) => setActivityQuery(e.target.value)}
+                placeholder="Search by name, activity, or location…"
+                className={inputClass}
+              />
+              <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-ink-400/30 p-3 dark:border-white/15">
+                {visibleActivities.length === 0 ? (
+                  <p className="text-sm text-ink-500 dark:text-white/40">No activities match that search.</p>
+                ) : (
+                  visibleActivities.map((a) => (
+                    <label key={a.id} className="flex items-start gap-2 text-sm text-ink-700 dark:text-white/70">
+                      <input
+                        type="checkbox"
+                        className="field-checkbox mt-0.5"
+                        checked={activityIds.includes(a.id)}
+                        onChange={() => toggleActivity(a.id)}
+                      />
+                      {a.label}
+                    </label>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-      <div>
-        <label className={labelClass} htmlFor="receivedBy">
-          Received by
-        </label>
-        <input
-          id="receivedBy"
-          type="text"
-          value={receivedBy}
-          onChange={(e) => setReceivedBy(e.target.value)}
-          className={inputClass}
-        />
-      </div>
+      {/* Their entry form captures Remarks at the point of logging, not only
+          when the record is revisited, so it appears on create too. */}
+      {registerStyle && mode === "create" && (
+        <div>
+          <label className={labelClass} htmlFor="progressRemarks">
+            Remarks
+          </label>
+          <textarea
+            id="progressRemarks"
+            rows={2}
+            value={progressRemarks}
+            onChange={(e) => setProgressRemarks(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
 
       {mode === "edit" && (
         <>
@@ -208,7 +408,7 @@ export function OutgoingForm({ mode, id, incomingDocs, initialData }: OutgoingFo
 
           <div>
             <label className={labelClass} htmlFor="progressRemarks">
-              Progress / remarks
+              {registerStyle ? "Remarks" : "Progress / remarks"}
             </label>
             <input
               id="progressRemarks"

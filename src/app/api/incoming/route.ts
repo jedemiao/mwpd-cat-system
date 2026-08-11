@@ -5,7 +5,12 @@ import { computeDueDate } from "@/lib/artaLeadTime";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { publishToUser } from "@/lib/notifyBus";
 import { canSignOffAsChief } from "@/lib/authz";
-import { buildRoutingNumber, DOCUMENT_TYPE_CODE_VALUES } from "@/lib/documentTypeCodes";
+import {
+  buildRoutingNumber,
+  buildInternalRoutingNumber,
+  DOCUMENT_TYPE_CODE_VALUES,
+  DOCUMENT_TYPE_OTHER_CODE,
+} from "@/lib/documentTypeCodes";
 import { z } from "zod";
 
 // The DC column — see src/lib/authz.ts. Routine intake (date received,
@@ -23,6 +28,7 @@ const createSchema = z.object({
   dateReceived: z.string(), // ISO date string from the client
   timeReceived: timeString,
   documentType: z.enum(DOCUMENT_TYPE_CODE_VALUES),
+  documentTypeOther: z.string().trim().min(1).optional(),
   documentTitle: z.string(),
   origin: z.enum(["INTERNAL", "EXTERNAL"]).default("EXTERNAL"),
   receivedById: z.string().optional().or(z.literal("")),
@@ -109,6 +115,7 @@ export async function POST(req: NextRequest) {
   const {
     dateReceived,
     documentType,
+    documentTypeOther,
     complexity,
     routedToIds: _routedToIds,
     activityIds: _activityIds,
@@ -117,6 +124,13 @@ export async function POST(req: NextRequest) {
     ...rest
   } = parsed.data;
   const receivedDate = new Date(dateReceived);
+
+  // "Others" without the specification is a type that says nothing, so it is
+  // refused here rather than only hidden behind the form's `required`.
+  if (documentType === DOCUMENT_TYPE_OTHER_CODE && !documentTypeOther) {
+    return NextResponse.json({ error: "Specify the document type when choosing Others." }, { status: 400 });
+  }
+
   // NOTE: timeReceived is stored but deliberately not fed into computeDueDate —
   // the office's cutoff rule is undecided. See docs/PHP-TRACKER-ADOPTION.md.
   const dueDate = computeDueDate(receivedDate, complexity);
@@ -125,21 +139,33 @@ export async function POST(req: NextRequest) {
 
   // Atomically claim the next sequence number and create the record together,
   // so two simultaneous intakes can never be handed the same routing number.
+  // Internal and external are separate ledgers to this office, each counting
+  // from 001, so they claim from separate counters. `rest.origin` carries the
+  // validated enum (defaulted to EXTERNAL by the schema above).
+  const isInternal = rest.origin === "INTERNAL";
+
   const doc = await prisma.$transaction(async (tx) => {
     const office = await tx.office.update({
       where: { id: session.user.officeId },
-      data: { incomingSeqCounter: { increment: 1 } },
-      select: { incomingSeqCounter: true },
+      data: isInternal
+        ? { incomingInternalSeqCounter: { increment: 1 } }
+        : { incomingSeqCounter: { increment: 1 } },
+      select: { incomingSeqCounter: true, incomingInternalSeqCounter: true },
     });
 
     return tx.incomingDocument.create({
       data: {
         ...rest,
         officeId: session.user.officeId,
-        routingNumber: buildRoutingNumber(receivedDate, documentType, office.incomingSeqCounter),
+        routingNumber: isInternal
+          ? buildInternalRoutingNumber(receivedDate, documentType, office.incomingInternalSeqCounter)
+          : buildRoutingNumber(receivedDate, documentType, office.incomingSeqCounter),
         // Stored as well as embedded in the routing number, so the ledger can
         // be filtered by type without parsing the number back apart.
         documentType,
+        // Only meaningful alongside "Others"; cleared otherwise so a type
+        // changed away from Others can't leave a stale specification behind.
+        documentTypeOther: documentType === DOCUMENT_TYPE_OTHER_CODE ? documentTypeOther : null,
         dateReceived: receivedDate,
         timeReceived: timeReceived || null,
         receivedById: receivedById || null,
