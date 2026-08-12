@@ -11,6 +11,8 @@ import {
   ClipboardListIcon,
   UsersIcon,
   ArchiveIcon,
+  ClockIcon,
+  TargetIcon,
   FolderIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -31,12 +33,24 @@ export function Sidebar({
   dueSoon,
   officeName,
   officeCode,
+  splitIncomingLedgers,
+  tracksInternalMemos,
+  tracksDtr,
+  tracksDipcr,
 }: {
   overdue: number;
   dueSoon: number;
   /** The signed-in user's own office — every unit sees its own name here, never another's. */
   officeName: string;
   officeCode: string;
+  /** Whether this office reaches internal and external as two separate ledgers. */
+  splitIncomingLedgers: boolean;
+  /** Whether this office keeps an internal memorandum register at all. */
+  tracksInternalMemos: boolean;
+  /** Whether this office keeps the DTR filing register at all. */
+  tracksDtr: boolean;
+  /** Whether this office keeps a D/IPCR performance commitment at all. */
+  tracksDipcr: boolean;
 }) {
   const pathname = usePathname();
   // Internal and External are the same route distinguished only by ?origin, so
@@ -56,20 +70,42 @@ export function Sidebar({
       label: "Incoming",
       icon: <InboxIcon className="h-[18px] w-[18px]" />,
       badge: overdue > 0 ? { count: overdue, tone: "danger" } : dueSoon > 0 ? { count: dueSoon, tone: "warning" } : null,
-      // The office keeps internal and external as two separate ledgers, each
-      // with its own numbering run, and reaches them as two nav items. These
-      // are the same route with the source preset rather than duplicated pages
-      // — per the adoption plan's "column plus a filter, not a second page" —
-      // but they are presented as the two destinations staff actually think in.
-      children: [
-        { href: "/incoming?origin=INTERNAL", label: "Internal" },
-        { href: "/incoming?origin=EXTERNAL", label: "External" },
-      ],
+      // Only where the office keeps internal and external as two separate
+      // ledgers, each with its own numbering run (Office.splitIncomingLedgers).
+      // These are the same route with the source preset rather than duplicated
+      // pages — per the adoption plan's "column plus a filter, not a second
+      // page" — but they are presented as the two destinations those staff
+      // actually think in.
+      //
+      // For an office with one ledger they are omitted entirely rather than
+      // left as shortcuts: alongside the separate "Internal" module further
+      // down this same nav, a second "Internal" entry nested under Incoming was
+      // two different things wearing one word.
+      children: splitIncomingLedgers
+        ? [
+            { href: "/incoming?origin=INTERNAL", label: "Internal" },
+            { href: "/incoming?origin=EXTERNAL", label: "External" },
+          ]
+        : undefined,
     },
     { href: "/outgoing", label: "Outgoing", icon: <SendIcon className="h-[18px] w-[18px]" /> },
     { href: "/activities", label: "Monthly activity", icon: <ClipboardListIcon className="h-[18px] w-[18px]" /> },
     { href: "/leave", label: "Leave", icon: <UsersIcon className="h-[18px] w-[18px]" /> },
-    { href: "/internal", label: "Internal", icon: <ArchiveIcon className="h-[18px] w-[18px]" /> },
+    // Beside Leave: both are staff-roster records rather than correspondence,
+    // and someone checking who is out is next to someone checking who has filed.
+    ...(tracksDtr
+      ? [{ href: "/dtr", label: "DTR filing", icon: <ClockIcon className="h-[18px] w-[18px]" /> }]
+      : []),
+    // The internal memorandum register is MWPTD's; an office that keeps none
+    // has the entry omitted rather than shown leading to an empty ledger.
+    ...(tracksInternalMemos
+      ? [{ href: "/internal", label: "Internal", icon: <ArchiveIcon className="h-[18px] w-[18px]" /> }]
+      : []),
+    // Last of the records modules, before Forms: the D/IPCR is the summary the
+    // others feed, so it reads after them rather than among them.
+    ...(tracksDipcr
+      ? [{ href: "/dipcr", label: "D/IPCR", icon: <TargetIcon className="h-[18px] w-[18px]" /> }]
+      : []),
     { href: "/forms", label: "Forms", icon: <FolderIcon className="h-[18px] w-[18px]" /> },
   ];
 

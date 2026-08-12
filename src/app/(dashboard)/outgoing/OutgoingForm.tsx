@@ -142,6 +142,55 @@ export function OutgoingForm({
     router.refresh();
   }
 
+  // Built once and placed differently rather than written twice: the register
+  // keeps its type beside the date released, while an office whose number is
+  // generated shows the number there instead and drops the type onto the next
+  // line — the same arrangement as the incoming form. Same field either way.
+  const documentTypeField = (
+    <>
+      <label className={labelClass} htmlFor="documentType">
+        {registerStyle ? "Type of Document" : "Document type"}
+      </label>
+      <select
+        id="documentType"
+        value={documentType}
+        onChange={(e) => setDocumentType(e.target.value as DocumentTypeCode)}
+        className={inputClass}
+      >
+        {DOCUMENT_TYPE_CODES.map((t) => (
+          <option key={t.code} value={t.code}>
+            {t.code} — {t.label}
+          </option>
+        ))}
+      </select>
+      {!registerStyle && (
+        <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+          Routing number is generated automatically from the date released, type, and next sequence number.
+        </p>
+      )}
+      {/* Same shape as LeaveForm's "Please specify": revealed only on
+          Others, and required there — an unexplained "Others" records
+          nothing the legend didn't already fail to describe. */}
+      {documentType === DOCUMENT_TYPE_OTHER_CODE && (
+        <div className="mt-3">
+          <label className={labelClass} htmlFor="documentTypeOther">
+            Please specify
+          </label>
+          <input
+            id="documentTypeOther"
+            type="text"
+            required
+            maxLength={100}
+            placeholder="e.g. Terminal Report, Accomplishment Report…"
+            value={documentTypeOther}
+            onChange={(e) => setDocumentTypeOther(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <form onSubmit={handleSubmit} className="card max-w-2xl space-y-4 p-6">
       <div className="grid grid-cols-2 gap-4">
@@ -158,67 +207,38 @@ export function OutgoingForm({
             className={inputClass}
           />
         </div>
-        <div>
-          {mode === "create" ? (
-            <>
-              <label className={labelClass} htmlFor="documentType">
-                {registerStyle ? "Type of Document" : "Document type"}
-              </label>
-              <select
-                id="documentType"
-                value={documentType}
-                onChange={(e) => setDocumentType(e.target.value as DocumentTypeCode)}
-                className={inputClass}
-              >
-                {DOCUMENT_TYPE_CODES.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.code} — {t.label}
-                  </option>
-                ))}
-              </select>
-              {!registerStyle && (
-                <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
-                  Routing number is generated automatically from the date released, type, and next sequence number.
-                </p>
-              )}
-              {/* Same shape as LeaveForm's "Please specify": revealed only on
-                  Others, and required there — an unexplained "Others" records
-                  nothing the legend didn't already fail to describe. */}
-              {documentType === DOCUMENT_TYPE_OTHER_CODE && (
-                <div className="mt-3">
-                  <label className={labelClass} htmlFor="documentTypeOther">
-                    Please specify
-                  </label>
-                  <input
-                    id="documentTypeOther"
-                    type="text"
-                    required
-                    maxLength={100}
-                    placeholder="e.g. Terminal Report, Accomplishment Report…"
-                    value={documentTypeOther}
-                    onChange={(e) => setDocumentTypeOther(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <label className={labelClass} htmlFor="routingNumber">
-                Routing number
-              </label>
-              <input
-                id="routingNumber"
-                type="text"
-                required
-                value={routingNumber}
-                onChange={(e) => setRoutingNumber(e.target.value)}
-                className={inputClass}
-              />
-            </>
-          )}
-        </div>
+        {/* Nothing sits beside the date on create where the number is
+            generated: the sequence is only claimed on save, so the cell is left
+            out rather than filled with a box that never completes. The note
+            under Document type already says where the number comes from, and
+            the edit form carries the real one. */}
+        {mode === "edit" ? (
+          <div>
+            <label className={labelClass} htmlFor="routingNumber">
+              Routing number
+            </label>
+            <input
+              id="routingNumber"
+              type="text"
+              required
+              value={routingNumber}
+              onChange={(e) => setRoutingNumber(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        ) : registerStyle ? (
+          <div>{documentTypeField}</div>
+        ) : null}
       </div>
+
+      {/* Below the row for an office whose number is generated, so the pair the
+          clerk actually fills reads down the page — date, then type — with the
+          number they cannot set sitting beside the date it derives from. */}
+      {mode === "create" && !registerStyle && (
+        <div className="grid grid-cols-2 gap-4">
+          <div>{documentTypeField}</div>
+        </div>
+      )}
 
       {/* Typed here rather than generated, as the office's own register does.
           It is unique across the whole table, so a repeat is refused by the API

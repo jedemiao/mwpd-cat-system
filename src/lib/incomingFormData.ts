@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 // activityIds, and existing links are untouched because a PATCH that omits the
 // field leaves them alone.
 export async function getIncomingFormData(officeId: string) {
-  const [users, agencyRows, signatoryRows] = await Promise.all([
+  const [users, agencyRows, signatoryRows, office] = await Promise.all([
     prisma.user.findMany({
       where: { officeId, isActive: true },
       orderBy: { name: "asc" },
@@ -30,11 +30,20 @@ export async function getIncomingFormData(officeId: string) {
       select: { signatory: true },
       orderBy: { signatory: "asc" },
     }),
+    // Fetched here rather than in each page: whether the form shows a Source
+    // field is the same question on create and on edit, and both callers were
+    // already awaiting this function.
+    prisma.office.findUnique({
+      where: { id: officeId },
+      select: { splitIncomingLedgers: true, incomingRegisterForm: true },
+    }),
   ]);
 
   return {
     users,
     agencySuggestions: agencyRows.map((r) => r.originAgency!).filter(Boolean),
     signatorySuggestions: signatoryRows.map((r) => r.signatory!).filter(Boolean),
+    splitIncomingLedgers: office?.splitIncomingLedgers ?? false,
+    registerLayout: office?.incomingRegisterForm ?? false,
   };
 }

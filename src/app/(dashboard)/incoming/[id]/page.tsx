@@ -21,9 +21,8 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
 
   if (!doc) notFound();
 
-  const { users, agencySuggestions, signatorySuggestions } = await getIncomingFormData(
-    session!.user.officeId,
-  );
+  const { users, agencySuggestions, signatorySuggestions, splitIncomingLedgers, registerLayout } =
+    await getIncomingFormData(session!.user.officeId);
 
   return (
     <main className="p-6 lg:p-8">
@@ -36,6 +35,8 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
         signatorySuggestions={signatorySuggestions}
         currentUserId={session!.user.id}
         canSignOff={canSignOffAsChief(session!.user.role)}
+        splitIncomingLedgers={splitIncomingLedgers}
+        registerLayout={registerLayout}
         initialData={{
           dateReceived: toDateInputValue(doc.dateReceived),
           timeReceived: doc.timeReceived ?? "",
@@ -47,6 +48,7 @@ export default async function EditIncomingPage(props: { params: Promise<{ id: st
           documentTypeOther: doc.documentTypeOther ?? "",
           routingNumber: doc.routingNumber,
           documentTitle: doc.documentTitle,
+          dueDate: toDateInputValue(doc.dueDate),
           routedToIds: doc.routedTo.map((r) => r.userId),
           instructions: doc.instructions ?? "",
           complexity: doc.complexity,

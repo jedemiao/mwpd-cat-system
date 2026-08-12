@@ -19,7 +19,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     getArtaAlertCounts(session.user.officeId),
     getRoutedToMeSummary(session.user.officeId, session.user.id),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { avatarUrl: true, isActive: true } }),
-    prisma.office.findUnique({ where: { id: session.user.officeId }, select: { name: true, code: true } }),
+    prisma.office.findUnique({
+      where: { id: session.user.officeId },
+      select: {
+        name: true,
+        code: true,
+        splitIncomingLedgers: true,
+        tracksInternalMemos: true,
+        tracksDtr: true,
+        tracksDipcr: true,
+      },
+    }),
   ]);
 
   // Sign-in already refuses deactivated accounts, but a JWT issued before the
@@ -43,6 +53,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         dueSoon={dueSoon}
         officeName={office?.name ?? "DMW Regional Office XIII"}
         officeCode={office?.code ?? "DMW"}
+        splitIncomingLedgers={office?.splitIncomingLedgers ?? false}
+        tracksInternalMemos={office?.tracksInternalMemos ?? false}
+        tracksDtr={office?.tracksDtr ?? false}
+        tracksDipcr={office?.tracksDipcr ?? false}
       />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <Topbar

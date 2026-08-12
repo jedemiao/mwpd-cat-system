@@ -11,6 +11,14 @@ import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_OTHER_CODE, documentTypeLabel } from "@/lib/documentTypeCodes";
+import {
+  PIPELINE_STAGE_LABELS,
+  isPipelineStage,
+  officeTracksSignOff,
+  pipelineStageWhere,
+  pipelineStagesFor,
+  type PipelineStage,
+} from "@/lib/correspondencePipeline";
 
 // In the ledger's narrow type column, an "Others" row shows what was actually
 // typed — a bare "O" would be the one code the legend cannot explain.
@@ -37,6 +45,7 @@ const ORIGIN_LABELS: Record<string, string> = { INTERNAL: "Internal", EXTERNAL: 
 type SearchParams = {
   q?: string;
   status?: string;
+  stage?: string;
   origin?: string;
   type?: string;
   agency?: string;
@@ -54,6 +63,22 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
 
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "all";
+  // Which handover the document is sitting at, from the dashboard's pipeline
+  // board. Kept as its own parameter rather than folded into `status` because
+  // the two are orthogonal — "overdue and unrouted" is the combination anyone
+  // chasing a backlog actually wants, and one shared parameter could not say it.
+  //
+  // An unrecognised value falls back to no filter rather than an empty ledger,
+  // matching how `status` treats anything outside its three known values —
+  // and "unrecognised" is judged against the stages this office actually has,
+  // not the global list. A hand-typed ?stage=signed-off at an office with no
+  // sign-off step is a name that means nothing here, so it should give the
+  // whole ledger rather than a heading over permanently empty results.
+  const tracksSignOff = await officeTracksSignOff(officeId);
+  const officeStages = pipelineStagesFor(tracksSignOff);
+  const stageParam = searchParams.stage ?? "";
+  const stage: PipelineStage | "" =
+    isPipelineStage(stageParam) && officeStages.includes(stageParam) ? stageParam : "";
   const origin = searchParams.origin ?? "";
   const docType = searchParams.type ?? "";
   const agency = searchParams.agency ?? "";
@@ -71,9 +96,22 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
           ? { dateCompleted: { not: null } }
           : {};
 
+  // Built by the shared function rather than restated here, so the row count
+  // behind a pipeline link can never disagree with the number that was clicked
+  // — including the sign-off variation, which changes what `unrouted` and
+  // `routed` mean, not just whether a fourth tile appears.
+  const stageWhere: Prisma.IncomingDocumentWhereInput = stage
+    ? pipelineStageWhere(stage, tracksSignOff)
+    : {};
+
+  // Status and stage go inside AND rather than being spread alongside the rest.
+  // Both can set `dateCompleted`, and the free-text search below sets `OR` —
+  // spreading them into one object let whichever came last silently win, so
+  // "pending" plus a search term quietly widened to every open document,
+  // overdue ones included. AND keeps each condition whole.
   const where: Prisma.IncomingDocumentWhereInput = {
     officeId,
-    ...statusWhere,
+    AND: [statusWhere, stageWhere],
     ...(origin === "INTERNAL" || origin === "EXTERNAL" ? { origin } : {}),
     ...(docType ? { documentType: docType } : {}),
     ...(agency ? { originAgency: agency } : {}),
@@ -112,7 +150,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
     // whether the Due date column renders at all, so this now runs every load.
     prisma.office.findUnique({
       where: { id: officeId },
-      select: { name: true, tracksArta: true, detailedLedgerColumns: true },
+      select: { name: true, tracksArta: true, detailedLedgerColumns: true, incomingRegisterForm: true },
     }),
     // Filter options derived from what's actually been logged, office-wide —
     // deliberately not narrowed by the current filter, or choosing one value
@@ -144,6 +182,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
   const activeFilters = {
     q,
     status: status !== "all" ? status : undefined,
+    stage: stage || undefined,
     origin: origin || undefined,
     type: docType || undefined,
     agency: agency || undefined,
@@ -157,10 +196,25 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
   // nav links straight into each. Naming the ledger in the heading is what
   // stops a filtered list from looking identical to the full one — without it
   // the only difference on screen is which rows happen to be missing.
+  //
+  // Arriving from the dashboard's pipeline board, the stage names the list too:
+  // the board's promise is "these N documents", and a heading that still said
+  // "Incoming documents" would leave the reader checking the count by hand.
   const ledgerLabel = ORIGIN_LABELS[origin] ?? "";
-  const heading = ledgerLabel ? `Incoming · ${ledgerLabel}` : "Incoming documents";
+  const stageLabel = stage ? PIPELINE_STAGE_LABELS[stage] : "";
+  const heading = [ledgerLabel ? `Incoming · ${ledgerLabel}` : "Incoming documents", stageLabel]
+    .filter(Boolean)
+    .join(" · ");
   const tracksArta = office?.tracksArta ?? false;
   const detailedColumns = office?.detailedLedgerColumns ?? false;
+  // This office reads its ledger as its register: only the columns that sheet
+  // has (Office.incomingRegisterForm). Source and Doc Type are not among them.
+  const registerLayout = office?.incomingRegisterForm ?? false;
+  // Source: the register's form never asks for one, so every row would read the
+  // same value. A column and a filter that can only ever say "External" are
+  // worse than absent — they invite someone to go looking for a distinction
+  // this office does not draw.
+  const tracksOrigin = !registerLayout;
 
   return (
     <main className="space-y-4 p-6 lg:p-8">
@@ -191,6 +245,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
           filters={[
             { label: "Search", value: q },
             { label: "Status", value: STATUS_LABELS[status] ?? "" },
+            { label: "Stage", value: stageLabel },
             { label: "Source", value: ORIGIN_LABELS[origin] ?? "" },
             { label: "Type", value: docType },
             { label: "Agency", value: agency },
@@ -247,11 +302,13 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
               className="field-input pl-9"
             />
           </div>
-          <select name="origin" defaultValue={origin} className="field-input w-auto">
-            <option value="">All sources</option>
-            <option value="INTERNAL">Internal</option>
-            <option value="EXTERNAL">External</option>
-          </select>
+          {tracksOrigin && (
+            <select name="origin" defaultValue={origin} className="field-input w-auto">
+              <option value="">All sources</option>
+              <option value="INTERNAL">Internal</option>
+              <option value="EXTERNAL">External</option>
+            </select>
+          )}
           <select name="type" defaultValue={docType} className="field-input w-auto">
             <option value="">All types</option>
             {docTypes.map((t) => (
@@ -281,6 +338,17 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>
             <option value="completed">Completed</option>
+          </select>
+          {/* Present as a control, not just an honoured URL parameter: without
+              it, hitting Search after arriving from the pipeline board would
+              silently drop the stage and hand back the whole ledger. */}
+          <select name="stage" defaultValue={stage} className="field-input w-auto">
+            <option value="">All stages</option>
+            {officeStages.map((s) => (
+              <option key={s} value={s}>
+                {PIPELINE_STAGE_LABELS[s]}
+              </option>
+            ))}
           </select>
           <button type="submit" className="btn-dark">
             Search
@@ -312,7 +380,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                 <th>Time</th>
                 <th>Control No.</th>
                 <th>Doc Type</th>
-                {!origin && <th>Source</th>}
+                {tracksOrigin && !origin && <th>Source</th>}
                 <th>Office/Agency</th>
                 <th>Signatories</th>
                 <th>Particulars</th>
@@ -328,9 +396,16 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
               <tr>
                 <th>Date received</th>
                 <th>Routing number</th>
-                {!origin && <th>Source</th>}
-                <th>Type</th>
-                <th>Particulars</th>
+                {tracksOrigin && !origin && <th>Source</th>}
+                {/* Not a column on the register. The type is still recorded and
+                    still filterable — it is the middle segment of the routing
+                    number beside it (081226-L-020), so a column repeating it
+                    spent width on something already on the row. */}
+                {!registerLayout && <th>Type</th>}
+                {/* "Particulars" is MWPSD's word for this column and stays in
+                    their register above; everywhere else the heading matches
+                    the form's own label, as the outgoing ledger already does. */}
+                <th>Document title / subject</th>
                 <th>Routed to</th>
                 {tracksArta && <th>Due date</th>}
                 <th>Status</th>
@@ -353,7 +428,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                       <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
                         {documentTypeCell(doc.documentType, doc.documentTypeOther)}
                       </td>
-                      {!origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
+                      {tracksOrigin && !origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
                       <td>{doc.originAgency ?? "—"}</td>
                       <td>{doc.signatory ?? "—"}</td>
                       <td>{doc.documentTitle}</td>
@@ -369,12 +444,17 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                         )}
                       </td>
                       <td className="whitespace-nowrap font-mono text-xs">{doc.routingNumber}</td>
-                      {!origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
-                      <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
-                        {documentTypeCell(doc.documentType, doc.documentTypeOther)}
-                      </td>
+                      {tracksOrigin && !origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
+                      {!registerLayout && (
+                        <td className="whitespace-nowrap text-xs" title={documentTypeLabel(doc.documentType, doc.documentTypeOther)}>
+                          {documentTypeCell(doc.documentType, doc.documentTypeOther)}
+                        </td>
+                      )}
                       <td>
                         {doc.documentTitle}
+                        {/* The register has no Office/Agency column either, and
+                            its form never collects one, so this sub-line has
+                            nothing to show there. */}
                         {doc.originAgency && (
                           <span className="block text-xs text-ink-400 dark:text-white/30">{doc.originAgency}</span>
                         )}

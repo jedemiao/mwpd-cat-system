@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
+import { officeTracksInternalMemos } from "@/lib/internalMemos";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { Prisma } from "@prisma/client";
@@ -11,6 +12,14 @@ const createSchema = z.object({
   documentTitle: z.string(),
   instructions: z.string().optional(),
   receivedBy: z.string().optional(),
+  // The register is one row filled in over time, and a memo is often logged
+  // after it has already gone out and been acknowledged — every row of the
+  // office's own sheet carries remarks, a scan and FILED=YES. So the later
+  // columns are accepted on create rather than only on edit; without them Zod
+  // strips the values and the first save silently loses what was typed.
+  progressRemarks: z.string().optional(),
+  scannedCopyUrl: z.string().optional(),
+  filed: z.boolean().optional(),
 });
 
 // GET /api/internal — list internal memos for the logged-in user's office, newest first
@@ -18,6 +27,13 @@ export async function GET(req: NextRequest) {
   const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // The module itself is per-office (Office.tracksInternalMemos). Checked in
+  // every handler, not only in the pages: hiding the nav entry does not stop a
+  // signed-in user at another division calling this route directly.
+  if (!(await officeTracksInternalMemos(session.user.officeId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const memos = await prisma.internalMemo.findMany({
@@ -33,6 +49,10 @@ export async function POST(req: NextRequest) {
   const session = await getActiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  if (!(await officeTracksInternalMemos(session.user.officeId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const body = await req.json();

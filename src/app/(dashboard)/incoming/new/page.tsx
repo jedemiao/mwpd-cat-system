@@ -12,26 +12,28 @@ export default async function NewIncomingPage({
   const session = await getServerSession(authOptions);
   const { origin } = await searchParams;
 
-  // Carried from whichever ledger the clerk pressed "New" in. This is now the
-  // only way source is set — the form has no Source field — and the two ledgers
-  // number differently, so the wrong value here files the document in the wrong
-  // ledger with a number in the wrong format, not just a mislabelled row.
-  //
-  // Falls back to External rather than staying blank: every entry point in the
-  // nav carries an origin, so a bare /incoming/new is someone typing the URL,
-  // and External is both the schema default and the far commoner case. The
-  // heading always names the ledger so the choice is never silent.
-  const presetOrigin = origin === "INTERNAL" ? "INTERNAL" : "EXTERNAL";
+  const { users, agencySuggestions, signatorySuggestions, splitIncomingLedgers, registerLayout } =
+    await getIncomingFormData(session!.user.officeId);
 
-  const { users, agencySuggestions, signatorySuggestions } = await getIncomingFormData(
-    session!.user.officeId,
-  );
+  // Where the office keeps two registers, source is carried from whichever
+  // ledger the clerk pressed "New" in, and the two number differently — so the
+  // wrong value here files the document in the wrong ledger with a number in
+  // the wrong format, not just a mislabelled row. It falls back to External
+  // rather than staying blank: every nav entry point carries an origin, so a
+  // bare /incoming/new is someone typing the URL, and External is both the
+  // schema default and the far commoner case. The heading names the ledger so
+  // the choice is never silent.
+  //
+  // Where the office files one ledger, there is no ledger to carry anything:
+  // the ?origin= parameter is ignored and the form asks for Source directly.
+  const presetOrigin = origin === "INTERNAL" ? "INTERNAL" : "EXTERNAL";
+  const heading = splitIncomingLedgers
+    ? `New ${presetOrigin === "INTERNAL" ? "internal" : "external"} incoming document`
+    : "New incoming document";
 
   return (
     <main className="p-6 lg:p-8">
-      <h1 className="mb-4 text-xl font-semibold text-ink-900 dark:text-white">
-        New {presetOrigin === "INTERNAL" ? "internal" : "external"} incoming document
-      </h1>
+      <h1 className="mb-4 text-xl font-semibold text-ink-900 dark:text-white">{heading}</h1>
       <IncomingForm
         mode="create"
         users={users}
@@ -39,6 +41,8 @@ export default async function NewIncomingPage({
         signatorySuggestions={signatorySuggestions}
         currentUserId={session!.user.id}
         canSignOff={canSignOffAsChief(session!.user.role)}
+        splitIncomingLedgers={splitIncomingLedgers}
+        registerLayout={registerLayout}
         initialData={{ origin: presetOrigin }}
       />
     </main>

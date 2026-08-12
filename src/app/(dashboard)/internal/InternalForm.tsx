@@ -50,6 +50,11 @@ export function InternalForm({ mode, id, initialData }: InternalFormProps) {
             documentTitle,
             instructions: instructions || undefined,
             receivedBy: receivedBy || undefined,
+            // The register's later columns, sent on the first save too — a memo
+            // logged after it has gone out arrives with these already known.
+            progressRemarks: progressRemarks || undefined,
+            scannedCopyUrl: scannedCopyUrl || undefined,
+            filed,
           }
         : {
             dateReleased,
@@ -152,31 +157,31 @@ export function InternalForm({ mode, id, initialData }: InternalFormProps) {
         />
       </div>
 
-      {mode === "edit" && (
-        <>
-          <hr className="border-ink-400/15 dark:border-white/10" />
+      {/* Present from the start, blank until they apply — the register is one
+          row filled in over time, and a memo is usually logged once it has
+          already gone out, so these are as answerable on the first save as on a
+          later one. Same arrangement as the incoming register form. */}
+      <hr className="border-ink-400/15 dark:border-white/10" />
 
-          <div>
-            <label className={labelClass} htmlFor="progressRemarks">
-              Progress / remarks
-            </label>
-            <input
-              id="progressRemarks"
-              type="text"
-              value={progressRemarks}
-              onChange={(e) => setProgressRemarks(e.target.value)}
-              className={inputClass}
-            />
-          </div>
+      <div>
+        <label className={labelClass} htmlFor="progressRemarks">
+          Progress / remarks
+        </label>
+        <input
+          id="progressRemarks"
+          type="text"
+          value={progressRemarks}
+          onChange={(e) => setProgressRemarks(e.target.value)}
+          className={inputClass}
+        />
+      </div>
 
-          <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />
+      <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />
 
-          <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-white/70">
-            <input type="checkbox" className="field-checkbox" checked={filed} onChange={(e) => setFiled(e.target.checked)} />
-            Filed
-          </label>
-        </>
-      )}
+      <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-white/70">
+        <input type="checkbox" className="field-checkbox" checked={filed} onChange={(e) => setFiled(e.target.checked)} />
+        Filed
+      </label>
 
       {error && <p className="text-sm text-danger-600">{error}</p>}
 

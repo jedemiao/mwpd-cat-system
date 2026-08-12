@@ -19,6 +19,9 @@ const updateSchema = z.object({
   documentType: z.string().nullable().optional(),
   documentTypeOther: z.string().nullable().optional(),
   documentTitle: z.string().optional(),
+  // See the create route: an explicit due date overrides the ARTA calculation,
+  // and is only ever sent by the register layout's Division Chief field.
+  dueDate: z.string().nullable().optional(),
   origin: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   receivedById: z.string().nullable().optional().or(z.literal("")),
   originAgency: z.string().nullable().optional(),
@@ -41,7 +44,7 @@ const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
 // The DC column — see src/lib/authz.ts. Routine record-keeping (date
 // received, routing number, title, progress remarks, scanned copy, filed)
 // stays open to whoever holds the record.
-const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "numCorrections", "dateCompleted", "dcSignOffDate"] as const;
+const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "numCorrections", "dateCompleted", "dcSignOffDate", "dueDate"] as const;
 
 // PATCH /api/incoming/[id] — update an intake record; due date is
 // recomputed if dateReceived or complexity changes. Only the Division Chief
@@ -106,6 +109,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     dateCompleted,
     dcSignOffDate,
     complexity,
+    dueDate: dueDateOverride,
     routedToIds: _routedToIds,
     activityIds: _activityIds,
     ...rest
@@ -113,7 +117,14 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const nextDateReceived = dateReceived ? new Date(dateReceived) : existing.dateReceived;
   const nextComplexity = complexity ?? existing.complexity;
-  const dueDate = computeDueDate(nextDateReceived, nextComplexity);
+  // An explicit due date wins; clearing it (null) falls back to the ARTA
+  // calculation rather than leaving the document with no due date at all, since
+  // an ARTA-tracked document without one would drop off the compliance board.
+  const overrideDate = dueDateOverride ? new Date(dueDateOverride) : null;
+  const dueDate =
+    overrideDate && !Number.isNaN(overrideDate.getTime())
+      ? overrideDate
+      : computeDueDate(nextDateReceived, nextComplexity);
 
   const doc = await prisma.$transaction(async (tx) => {
     if (routedToIds) {

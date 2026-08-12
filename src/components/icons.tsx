@@ -184,6 +184,27 @@ export function ArchiveIcon(props: IconProps) {
   );
 }
 
+// DTR filing — a clock, for the daily time record.
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 1.75" />
+    </svg>
+  );
+}
+
+// D/IPCR — a target, for the performance commitment's targets and measures.
+export function TargetIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" />
+    </svg>
+  );
+}
+
 export function FolderIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

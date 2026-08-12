@@ -3,6 +3,8 @@ import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getArtaAlertDocuments } from "@/lib/artaAlerts";
+import { getOfficePipeline } from "@/lib/correspondencePipeline";
+import { PipelineBoard } from "@/components/PipelineBoard";
 import { StatCard } from "@/components/StatCard";
 import { Badge } from "@/components/Badge";
 import { InboxIcon, SendIcon, ClipboardListIcon, UsersIcon } from "@/components/icons";
@@ -58,6 +60,7 @@ export default async function DashboardHomePage() {
   const [
     { overdueDocs, dueSoonDocs },
     office,
+    pipeline,
     monthActivities,
     monthLeaves,
     incomingPendingCount,
@@ -70,7 +73,14 @@ export default async function DashboardHomePage() {
     upcomingLeave,
   ] = await Promise.all([
     getArtaAlertDocuments(officeId),
-    prisma.office.findUnique({ where: { id: officeId }, select: { tracksArta: true } }),
+    prisma.office.findUnique({
+      where: { id: officeId },
+      select: { tracksArta: true, tracksCorrespondencePipeline: true, incomingRegisterForm: true },
+    }),
+    // Which stages exist depends on whether the office has a sign-off step, so
+    // this reads the flag itself rather than taking it from the query above —
+    // the two run in parallel and neither waits on the other.
+    getOfficePipeline(officeId),
     // Same overlap test the /activities calendar uses, so a multi-day activity
     // running across a month boundary still appears on this month's grid.
     prisma.activity.findMany({
@@ -141,11 +151,24 @@ export default async function DashboardHomePage() {
         </p>
       </div>
 
+      {/* Two boards, in the order the office asks the questions. The pipeline
+          leads because "where is everything sitting" is the standing question —
+          it has an answer every day of the year, and it is the one the ledger
+          view cannot give. ARTA follows because it is the sharper question but
+          not the constant one: on a good week it is empty, and an empty board
+          should not be what greets the division at the top of the page.
+
+          Both are opt-in per office (Office.tracksCorrespondencePipeline,
+          Office.tracksArta). A division carrying neither drops straight to the
+          month calendar, which is its real working view. */}
+      {office?.tracksCorrespondencePipeline && (
+        <PipelineBoard stages={pipeline.stages} counts={pipeline.counts} />
+      )}
+
       {/* ARTA compliance is the legally load-bearing metric for the office that
-          carries it, so it leads — rendered as a docket board, since that's how
-          due dates are actually tracked here. Only MWPTD is subject to ARTA;
-          for the exempt divisions this whole board is omitted rather than shown
-          empty, and the month calendar below becomes the page's lead. */}
+          carries it — rendered as a docket board, since that's how due dates
+          are actually tracked here. Only MWPTD is subject to ARTA; for the
+          exempt divisions this whole board is omitted rather than shown empty. */}
       {office?.tracksArta && (
       <section className="card overflow-hidden">
         <div className="card-header">
@@ -233,15 +256,25 @@ export default async function DashboardHomePage() {
         />
       </section>
 
-      {/* Quick stats */}
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          value={incomingPendingCount}
-          label="Incoming pending"
-          href="/incoming?status=pending"
-          tone="primary"
-          icon={<InboxIcon className="h-8 w-8" />}
-        />
+      {/* Quick stats. "Incoming pending" is dropped where the pipeline board is
+          shown: pending is exactly the sum of the board's first three stages,
+          and a total sitting beside its own parts invites the reader to check
+          whether they add up instead of reading either. Offices without the
+          board keep the card, which is their only view of that number. */}
+      <section
+        className={`grid grid-cols-2 gap-4 ${
+          office?.tracksCorrespondencePipeline ? "sm:grid-cols-3" : "sm:grid-cols-4"
+        }`}
+      >
+        {!office?.tracksCorrespondencePipeline && (
+          <StatCard
+            value={incomingPendingCount}
+            label="Incoming pending"
+            href="/incoming?status=pending"
+            tone="primary"
+            icon={<InboxIcon className="h-8 w-8" />}
+          />
+        )}
         <StatCard
           value={outgoingPendingCount}
           label="Outgoing pending"

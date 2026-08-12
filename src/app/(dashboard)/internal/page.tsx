@@ -1,8 +1,10 @@
 import { getServerSession } from "next-auth";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { officeTracksInternalMemos } from "@/lib/internalMemos";
 import { Pagination } from "@/components/Pagination";
 import { Badge } from "@/components/Badge";
 import { PrintLink, listHref } from "@/components/PrintLink";
@@ -23,6 +25,9 @@ export default async function InternalPage(props: { searchParams: Promise<Search
   const searchParams = await props.searchParams;
   const session = await getServerSession(authOptions);
   const officeId = session!.user.officeId;
+
+  // Only offices keeping an internal memorandum register have this module.
+  if (!(await officeTracksInternalMemos(officeId))) notFound();
 
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "all";
@@ -117,13 +122,20 @@ export default async function InternalPage(props: { searchParams: Promise<Search
       <div className="card overflow-x-auto">
         <table className="data-table">
           <thead>
+            {/* The office's internal memorandum register, column for column and
+                in its order: Instruction and Progress were always collected by
+                the form and stored on the row, but the ledger showed neither,
+                so the two columns the Division Chief actually writes in were
+                the two nobody could read back without opening each memo. */}
             <tr>
               <th>Date released</th>
-              <th>Memo #</th>
-              <th>Document title</th>
+              <th>Memorandum number</th>
+              <th>Document title / subject</th>
+              <th>Instruction / required actions</th>
               <th>Received by</th>
-              <th>Status</th>
+              <th>Progress / remarks</th>
               <th>Scanned copy</th>
+              <th>Filed</th>
               <th className="print:hidden"></th>
             </tr>
           </thead>
@@ -133,10 +145,9 @@ export default async function InternalPage(props: { searchParams: Promise<Search
                 <td className="whitespace-nowrap">{memo.dateReleased.toLocaleDateString()}</td>
                 <td className="whitespace-nowrap font-mono text-xs">{memo.memorandumNumber}</td>
                 <td>{memo.documentTitle}</td>
+                <td>{memo.instructions ?? "—"}</td>
                 <td>{memo.receivedBy ?? "—"}</td>
-                <td className="whitespace-nowrap">
-                  {memo.filed ? <Badge variant="success">Filed</Badge> : <Badge variant="warning">Pending</Badge>}
-                </td>
+                <td>{memo.progressRemarks ?? "—"}</td>
                 <td>
                   {isPrint ? (
                     memo.scannedCopyUrl ? (
@@ -151,6 +162,12 @@ export default async function InternalPage(props: { searchParams: Promise<Search
                   ) : (
                     "—"
                   )}
+                </td>
+                {/* Their register writes a bare YES here. The badge says the
+                    same and also says the other thing, which a blank cell in a
+                    spreadsheet leaves you to infer. */}
+                <td className="whitespace-nowrap">
+                  {memo.filed ? <Badge variant="success">Filed</Badge> : <Badge variant="warning">Pending</Badge>}
                 </td>
                 <td className="print:hidden">
                   <Link href={`/internal/${memo.id}`} className="font-medium text-primary hover:text-primary-600">

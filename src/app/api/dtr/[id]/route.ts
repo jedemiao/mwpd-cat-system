@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
-import { officeTracksInternalMemos } from "@/lib/internalMemos";
 import { prisma } from "@/lib/prisma";
+import { officeTracksDtr, parseMonthParam } from "@/lib/dtr";
 import { logAudit, getClientIp } from "@/lib/auditLog";
 import { canDelete } from "@/lib/authz";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  dateReleased: z.string().optional(),
-  memorandumNumber: z.number().int().optional(),
-  documentTitle: z.string().optional(),
-  instructions: z.string().nullable().optional(),
-  receivedBy: z.string().nullable().optional(),
-  progressRemarks: z.string().nullable().optional(),
-  scannedCopyUrl: z.string().nullable().optional(),
-  filed: z.boolean().optional(),
+  periodMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be YYYY-MM").optional(),
+  dateReceived: z.string().nullable().optional(),
+  dateFiled: z.string().nullable().optional(),
+  dateSubmittedToHr: z.string().nullable().optional(),
+  personnelId: z.string().optional(),
+  submittedAndChecked: z.boolean().optional(),
 });
 
-// PATCH /api/internal/[id] — update an internal memo record
+// PATCH /api/dtr/[id] — update one DTR filing record
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getActiveSession();
@@ -26,14 +24,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // The module itself is per-office (Office.tracksInternalMemos). Checked in
-  // every handler, not only in the pages: hiding the nav entry does not stop a
-  // signed-in user at another division calling this route directly.
-  if (!(await officeTracksInternalMemos(session.user.officeId))) {
+  // The module itself is per-office (Office.tracksDtr). Checked in every
+  // handler, not only in the pages.
+  if (!(await officeTracksDtr(session.user.officeId))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const existing = await prisma.internalMemo.findFirst({
+  const existing = await prisma.dtrRecord.findFirst({
     where: { id: params.id, officeId: session.user.officeId },
   });
   if (!existing) {
@@ -46,20 +43,36 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { dateReleased, ...rest } = parsed.data;
+  if (parsed.data.personnelId) {
+    const personnel = await prisma.user.findFirst({
+      where: { id: parsed.data.personnelId, officeId: session.user.officeId },
+    });
+    if (!personnel) {
+      return NextResponse.json({ error: "Invalid personnelId" }, { status: 400 });
+    }
+  }
 
-  let memo;
+  const { periodMonth, dateReceived, dateFiled, dateSubmittedToHr, ...rest } = parsed.data;
+
+  let record;
   try {
-    memo = await prisma.internalMemo.update({
+    record = await prisma.dtrRecord.update({
       where: { id: existing.id },
       data: {
         ...rest,
-        dateReleased: dateReleased ? new Date(dateReleased) : undefined,
+        periodMonth: periodMonth ? parseMonthParam(periodMonth)! : undefined,
+        // Three-way, as the Leave route does it: absent leaves the stored value
+        // alone, null clears it, a string sets it.
+        dateReceived: dateReceived === undefined ? undefined : dateReceived ? new Date(dateReceived) : null,
+        dateFiled: dateFiled === undefined ? undefined : dateFiled ? new Date(dateFiled) : null,
+        dateSubmittedToHr:
+          dateSubmittedToHr === undefined ? undefined : dateSubmittedToHr ? new Date(dateSubmittedToHr) : null,
       },
     });
   } catch (e) {
+    // Moving a record onto a month/person that already has one.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return NextResponse.json({ error: "That memorandum number is already in use" }, { status: 409 });
+      return NextResponse.json({ error: "That person already has a DTR recorded for that month" }, { status: 409 });
     }
     throw e;
   }
@@ -69,15 +82,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "UPDATE",
-    entityType: "InternalMemo",
-    entityId: memo.id,
+    entityType: "DtrRecord",
+    entityId: record.id,
     details: parsed.data,
   });
 
-  return NextResponse.json(memo);
+  return NextResponse.json(record);
 }
 
-// DELETE /api/internal/[id] — reserved for Division Chief / Admin
+// DELETE /api/dtr/[id] — reserved for Division Chief / Admin
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getActiveSession();
@@ -85,7 +98,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (!(await officeTracksInternalMemos(session.user.officeId))) {
+  if (!(await officeTracksDtr(session.user.officeId))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -93,21 +106,21 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Not permitted" }, { status: 403 });
   }
 
-  const existing = await prisma.internalMemo.findFirst({
+  const existing = await prisma.dtrRecord.findFirst({
     where: { id: params.id, officeId: session.user.officeId },
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await prisma.internalMemo.delete({ where: { id: existing.id } });
+  await prisma.dtrRecord.delete({ where: { id: existing.id } });
 
   await logAudit({
     ipAddress: getClientIp(req),
     officeId: session.user.officeId,
     userId: session.user.id,
     action: "DELETE",
-    entityType: "InternalMemo",
+    entityType: "DtrRecord",
     entityId: existing.id,
     details: existing,
   });

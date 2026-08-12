@@ -55,6 +55,14 @@ enum ActivityCategory {
   OTHERS
 }
 
+// Which half of the year a D/IPCR covers. The office prepares one sheet per
+// semester ("D/IPCR 2ND SEM"), and the six month columns on it are the months
+// of that half — so the semester decides which months the matrix shows.
+enum DipcrSemester {
+  FIRST  // January–June
+  SECOND // July–December
+}
+
 enum LeaveType {
   CTO
   VACATION
@@ -94,6 +102,87 @@ model Office {
   // MWPSD, who read their registers by column position.
   detailedLedgerColumns Boolean @default(false)
 
+  // Whether incoming internal and external are two registers or one.
+  //
+  // MWPSD keeps them apart: two nav entries, two numbering runs each counting
+  // from 001, two formats (see src/lib/documentTypeCodes.ts). That is how their
+  // own tracker works and they asked for it. MWPTD does not — they file one
+  // incoming ledger, and the split cost them a "New" button that silently
+  // decided a document's numbering format from whichever nav item they happened
+  // to press.
+  //
+  // Where this is false, DocumentOrigin goes back to being what the schema
+  // comment on the enum describes: one field on one ledger, chosen on the form
+  // and filterable, with a single numbering run behind it. Where it is true,
+  // origin also selects the counter and the format.
+  //
+  // Defaults to false because one ledger is the simpler arrangement and the
+  // original design; an office wanting two registers opts in.
+  splitIncomingLedgers Boolean @default(false)
+
+  // Whether this office's dashboard leads with the correspondence pipeline
+  // board — the count of documents sitting at each handover between the desk,
+  // the routed staff, the Division Chief's sign-off and the outgoing reply
+  // (see src/lib/correspondencePipeline.ts).
+  //
+  // Separate from tracksArta on purpose, even though MWPTD is currently the
+  // only office with both. ARTA is a legal duty about *lateness*; the pipeline
+  // is an internal workflow question about *where a document is stalled*. An
+  // office can meaningfully have one without the other, and folding them into
+  // one flag would mean an ARTA-exempt division could never adopt the board
+  // without also switching on due-date alerts it has no duty to act on.
+  //
+  // Defaults to false for the same reason tracksArta does: a division that
+  // barely uses the Incoming ledger would get a board of four zeroes leading
+  // its dashboard, which is worse than not having it.
+  tracksCorrespondencePipeline Boolean @default(false)
+
+  // Whether the incoming form is exactly this office's register — the twelve
+  // columns of MWPTD's sheet, in their order, under their headings, and
+  // nothing else. Every field it leaves out (time received, received by,
+  // source, office/agency, signatory, notes) was empty on all eleven of their
+  // live records: fields their register never had, so nobody ever filled them.
+  //
+  // Two consequences beyond which inputs render:
+  //
+  //  - There is no DC sign-off step. Their register goes routed → worked →
+  //    date task completed, with no separate sign-off column, so
+  //    dcSignOffDate is never collected and the pipeline board drops its
+  //    "Awaiting closure" stage for this office (src/lib/correspondencePipeline.ts).
+  //  - Every column is on the form from the start, blank until it applies,
+  //    because the register is one row filled in over time rather than an
+  //    intake screen and a follow-up screen.
+  //
+  // Defaults to false: the fuller form is the safe one for an office whose
+  // register nobody has read yet, since it collects a superset.
+  incomingRegisterForm Boolean @default(false)
+
+  // Whether this office keeps an internal memorandum register — the module at
+  // /internal, its nav entry, and its API routes.
+  //
+  // It is MWPTD's register: memoranda they issue to their own staff, numbered
+  // in their own run. The other divisions do not keep one, and no office
+  // outside MWPTD has ever created a memo, so switching it off strands nothing.
+  //
+  // Off by default. Unlike the display flags above, this one gates API routes
+  // as well as UI: hiding a nav entry is convenience, and the boundary that
+  // matters is the 404 in the route handler.
+  tracksInternalMemos Boolean @default(false)
+
+  // Whether this office keeps the DTR (Daily Time Record) filing register —
+  // the module at /dtr, its nav entry and its API routes.
+  //
+  // Filing a DTR with HR is a universal obligation, but tracking the filing is
+  // MWPTD's own practice and their sheet. Gated like the internal register, and
+  // for the same reason: an office that keeps no such checklist should not be
+  // able to reach the module by typing the URL.
+  tracksDtr Boolean @default(false)
+
+  // Whether this office keeps a D/IPCR — the performance commitment matrix at
+  // /dipcr, its nav entry and its API routes. MWPTD's; gated like the DTR and
+  // internal registers, and for the same reason.
+  tracksDipcr Boolean @default(false)
+
   // Monotonic counters for auto-generated routing numbers — a live count()
   // would reuse numbers after a delete, colliding with the unique
   // constraint on routingNumber. Separate per module: Incoming and
@@ -115,6 +204,8 @@ model Office {
   activities    Activity[]
   leaves        Leave[]
   internalMemos InternalMemo[]
+  dtrRecords    DtrRecord[]
+  dipcrIndicators DipcrIndicator[]
 }
 
 model User {
@@ -139,8 +230,130 @@ model User {
   receivedIncoming   IncomingDocument[]    @relation("IncomingReceivedBy")
   activityAssignment ActivityAssignee[]
   leaves             Leave[]
+  dtrRecords         DtrRecord[]
+  dipcrAccountable   DipcrAccountable[]
   auditLogs          AuditLog[]
   formTemplates      FormTemplate[]
+}
+
+// One row of the D/IPCR (Division / Individual Performance Commitment and
+// Review): a success indicator, what it costs, who is answerable for it, and
+// what was actually done about it month by month.
+//
+// The sheet is a matrix — indicators down, months across — and that is the
+// shape it is stored in: the indicator is the row, and each month's
+// accomplishment is a DipcrAccomplishment hanging off it. Six text columns on
+// this table would have mirrored the sheet more literally, but they would be
+// named for one semester and could not answer "what did the division do in
+// August" without reading every column of every row.
+model DipcrIndicator {
+  id       String        @id @default(cuid())
+  officeId String
+  office   Office        @relation(fields: [officeId], references: [id])
+
+  year     Int
+  semester DipcrSemester
+
+  // Column A's two levels, kept as text on the row rather than as their own
+  // tables. The page groups by them to reproduce the sheet's merged cells.
+  // A PAP is renamed rarely, and when it is, it is renamed on its own rows —
+  // cheaper than a table nobody would otherwise open.
+  section          String  // "CORE FUNCTIONS"
+  pap              String  // "Forging of MOU/MOA Partnerships"
+  // Column B — the target and its measure, as written.
+  successIndicator String
+  // Column C. Decimal, not Float: this is money, and it is stated to the
+  // centavo on the sheet. Null where the sheet leaves it blank, which is most
+  // rows — the budget is given once per PAP, against its first indicator.
+  allottedBudget   Decimal? @db.Decimal(14, 2)
+  // Column K.
+  remarks          String?
+  // Preserves the sheet's ordering within a PAP, which is meaningful — the
+  // indicators read as a sequence, not a set.
+  sortOrder        Int      @default(0)
+
+  accountable     DipcrAccountable[]
+  accomplishments DipcrAccomplishment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Every view of this module is one office's one semester.
+  @@index([officeId, year, semester])
+}
+
+// Column D — who is answerable. A real link to the roster rather than the
+// sheet's typed names, so the same person is the same person everywhere and
+// "what is Cherryl accountable for" is a query. Same shape as
+// IncomingRoutedStaff and ActivityAssignee.
+model DipcrAccountable {
+  indicatorId String
+  indicator   DipcrIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+
+  @@id([indicatorId, userId])
+}
+
+// One cell of the Actual Accomplishments block: what was done for this
+// indicator in this month.
+model DipcrAccomplishment {
+  id          String         @id @default(cuid())
+  indicatorId String
+  indicator   DipcrIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  // 1–12. Stored as the calendar month rather than an offset into the
+  // semester, so a cell means the same thing whichever half of the year it
+  // belongs to and nothing has to be re-based when the semester changes.
+  month     Int
+  narrative String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One cell per indicator per month — the matrix has no room for two.
+  @@unique([indicatorId, month])
+}
+
+// One person's Daily Time Record for one month, and how far it has got on its
+// way to HR. The office tracks this as a checklist, not a document: the value
+// is knowing who has not filed yet, which is why the page renders the whole
+// active roster for a month and marks the gaps rather than listing only the
+// rows that exist.
+//
+// The sheet this comes from states the month and the date the batch was
+// received once, in a merged cell over the rows. Both are stored per row
+// instead: the module keeps the four-module shape that way, and a row remains
+// meaningful on its own — filtered, printed, or read out of the audit log —
+// without needing a parent row to explain it.
+model DtrRecord {
+  id                  String   @id @default(cuid())
+  officeId            String
+  office              Office   @relation(fields: [officeId], references: [id])
+
+  // First day of the month the DTR covers, at UTC midnight — the period, not a
+  // date anything happened on. Every query normalises to the 1st, so "July
+  // 2026" is one value and not thirty-one near-misses.
+  periodMonth         DateTime
+  // When the office received the batch for that month ("DATE RECEIVED AUGUST 5,
+  // 2026" in the sheet's group cell). Same for every row of a month in practice,
+  // but stored per row — see above.
+  dateReceived        DateTime?
+  dateFiled           DateTime?
+  dateSubmittedToHr   DateTime?
+  personnelId         String
+  personnel           User     @relation(fields: [personnelId], references: [id])
+  // The sheet's "Submitted and checked" Yes/No.
+  submittedAndChecked Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // One DTR per person per month. This is what makes the roster view's "has
+  // this person filed?" a lookup rather than a guess, and what stops the same
+  // person being recorded twice for July because two people entered the batch.
+  @@unique([officeId, periodMonth, personnelId])
+  // The roster view always reads one office's rows for one month.
+  @@index([officeId, periodMonth])
 }
 
 model IncomingDocument {

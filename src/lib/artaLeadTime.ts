@@ -1,4 +1,10 @@
-import { DocComplexity } from "@prisma/client";
+// Structurally the same as Prisma's DocComplexity enum, declared locally so
+// this module carries no @prisma/client import. The incoming form is a client
+// component and needs computeDueDate to fill the due date as the Division Chief
+// picks a lead time; importing the Prisma client into the browser bundle to get
+// a three-value union would be a steep price for a type. Prisma's own enum
+// values assign to this union, so server callers are unaffected.
+export type DocComplexity = "SIMPLE" | "COMPLEX" | "HIGHLY_TECHNICAL";
 
 // Anti-Red Tape Act (ARTA) standard lead times, in working days.
 export const ARTA_LEAD_DAYS: Record<DocComplexity, number> = {

@@ -28,7 +28,26 @@ async function main() {
     //
     // tracksArta: MWPTD is the one office subject to ARTA due dates. The other
     // divisions and ORD are exempt and get the column's false default.
-    create: { name: "Migrant Workers Protection Division", code: "MWPTD-CARAGA", tracksArta: true },
+    //
+    // tracksCorrespondencePipeline: MWPTD's dashboard leads with the pipeline
+    // board. Set independently of tracksArta even though both are true here —
+    // they answer different questions, and the schema comment says why.
+    create: {
+      name: "Migrant Workers Protection Division",
+      code: "MWPTD-CARAGA",
+      tracksArta: true,
+      tracksCorrespondencePipeline: true,
+      // incomingRegisterForm: the incoming form is MWPTD's own register — their
+      // twelve columns and nothing else, and no DC sign-off step.
+      incomingRegisterForm: true,
+      // tracksInternalMemos: the internal memorandum register is MWPTD's; the
+      // other divisions do not keep one and get the column's false default.
+      tracksInternalMemos: true,
+      // tracksDtr: tracking DTR filing is MWPTD's own practice and their sheet.
+      tracksDtr: true,
+      // tracksDipcr: the performance commitment matrix is MWPTD's.
+      tracksDipcr: true,
+    },
   });
 
   const defaultPasswordHash = await bcrypt.hash("changeme123", 10);
