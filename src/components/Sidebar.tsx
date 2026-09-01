@@ -14,6 +14,8 @@ import {
   ClockIcon,
   TargetIcon,
   FolderIcon,
+  ScaleIcon,
+  PhoneIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "./icons";
@@ -37,6 +39,8 @@ export function Sidebar({
   tracksInternalMemos,
   tracksDtr,
   tracksDipcr,
+  tracksSena,
+  tracksCallLog,
 }: {
   overdue: number;
   dueSoon: number;
@@ -51,6 +55,10 @@ export function Sidebar({
   tracksDtr: boolean;
   /** Whether this office keeps a D/IPCR performance commitment at all. */
   tracksDipcr: boolean;
+  /** Whether this office runs SENA conciliation and keeps its conference register. */
+  tracksSena: boolean;
+  /** Whether this office keeps the telephone call log. */
+  tracksCallLog: boolean;
 }) {
   const pathname = usePathname();
   // Internal and External are the same route distinguished only by ?origin, so
@@ -89,6 +97,12 @@ export function Sidebar({
         : undefined,
     },
     { href: "/outgoing", label: "Outgoing", icon: <SendIcon className="h-[18px] w-[18px]" /> },
+    // Directly after Outgoing, which is where the office's own tab order puts
+    // it: a SENA case is what a correspondence complaint turns into, so the
+    // conciliation register reads as the next step rather than a separate world.
+    ...(tracksSena
+      ? [{ href: "/sena", label: "SENA", icon: <ScaleIcon className="h-[18px] w-[18px]" /> }]
+      : []),
     { href: "/activities", label: "Monthly activity", icon: <ClipboardListIcon className="h-[18px] w-[18px]" /> },
     { href: "/leave", label: "Leave", icon: <UsersIcon className="h-[18px] w-[18px]" /> },
     // Beside Leave: both are staff-roster records rather than correspondence,
@@ -106,16 +120,24 @@ export function Sidebar({
     ...(tracksDipcr
       ? [{ href: "/dipcr", label: "D/IPCR", icon: <TargetIcon className="h-[18px] w-[18px]" /> }]
       : []),
+    // Last of the registers, as it is in the office's own tabs, and before
+    // Forms: the call log records enquiries that mostly end in the call itself
+    // rather than entering any of the ledgers above.
+    ...(tracksCallLog
+      ? [{ href: "/call-log", label: "Call log", icon: <PhoneIcon className="h-[18px] w-[18px]" /> }]
+      : []),
     { href: "/forms", label: "Forms", icon: <FolderIcon className="h-[18px] w-[18px]" /> },
   ];
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-primary text-white transition-[width] duration-200 print:hidden ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-day text-dayfg dress-surface transition-[width] duration-200 print:hidden ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >
-      <div className={`flex h-16 items-center gap-2.5 border-b border-white/10 ${collapsed ? "justify-center px-2" : "px-5"}`}>
+      <div className={`flex h-16 items-center gap-2.5 border-b border-dayfg/10 ${collapsed ? "justify-center px-2" : "px-5"}`}>
+        {/* Stays white on every day: this is the seal's medallion, and the logo
+            is a full-colour image that needs a light backing to read. */}
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white">
           <Image src="/dmw_logo.png" alt="DMW logo" width={40} height={40} priority className="h-10 w-10" />
         </span>
@@ -124,7 +146,7 @@ export function Sidebar({
             <p className="font-display text-sm font-semibold tracking-tight">{shortCode} Tracker</p>
             {/* The regional office, not the division — the division is named in
                 the title above and in full at the foot of the nav. */}
-            <p className="font-mono text-[10px] uppercase tracking-wider text-white/45">DMW · Caraga</p>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-dayfg/55">DMW · Caraga</p>
           </div>
         )}
       </div>
@@ -141,12 +163,12 @@ export function Sidebar({
                 collapsed ? "justify-center border-l-0 px-0" : "justify-between px-3"
               } ${
                 active
-                  ? "border-white bg-white/15 text-white"
-                  : "border-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "border-dayfg bg-dayfg/15 text-dayfg"
+                  : "border-transparent text-dayfg/70 hover:bg-dayfg/10 hover:text-dayfg"
               }`}
             >
               <span className={`flex items-center ${collapsed ? "" : "gap-3"}`}>
-                <span className={`relative ${active ? "text-white" : "text-white/60"}`}>
+                <span className={`relative ${active ? "text-dayfg" : "text-dayfg/60"}`}>
                   {item.icon}
                   {collapsed && item.badge && (
                     <span className={`absolute -right-1 -top-1 h-2 w-2 rounded-full ${item.badge.tone === "danger" ? "bg-danger" : "bg-warning"}`} />
@@ -154,6 +176,10 @@ export function Sidebar({
                 </span>
                 {!collapsed && item.label}
               </span>
+              {/* Literal white below, not text-dayfg: the count sits on the ARTA
+                  badge's own bg-danger/bg-warning pill, not on the day surface.
+                  Switching it to the day colour would put dark text on a red
+                  pill every Monday. */}
               {!collapsed && item.badge && (
                 <span
                   className={`rounded-full px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-none text-white ${
@@ -177,8 +203,8 @@ export function Sidebar({
                     href={child.href}
                     className={`flex items-center border-l-2 py-1.5 pl-12 pr-3 text-[13px] transition-colors ${
                       childActive
-                        ? "border-white bg-white/10 text-white"
-                        : "border-transparent text-white/55 hover:bg-white/5 hover:text-white/90"
+                        ? "border-dayfg bg-dayfg/10 text-dayfg"
+                        : "border-transparent text-dayfg/55 hover:bg-dayfg/5 hover:text-dayfg/90"
                     }`}
                   >
                     {child.label}
@@ -191,7 +217,7 @@ export function Sidebar({
       </nav>
 
       {!collapsed && (
-        <div className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-white/35">
+        <div className="px-5 py-3 font-mono text-[10px] uppercase tracking-wider text-dayfg/50">
           {officeName}
         </div>
       )}
@@ -200,7 +226,7 @@ export function Sidebar({
         type="button"
         onClick={() => setCollapsed((v) => !v)}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className={`flex items-center gap-3 border-t border-white/10 py-4 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white ${
+        className={`flex items-center gap-3 border-t border-dayfg/10 py-4 text-sm font-medium text-dayfg/70 transition-colors hover:bg-dayfg/5 hover:text-dayfg ${
           collapsed ? "justify-center px-0" : "px-5"
         }`}
       >

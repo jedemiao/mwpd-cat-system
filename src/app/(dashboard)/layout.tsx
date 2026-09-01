@@ -6,6 +6,7 @@ import { getArtaAlertCounts } from "@/lib/artaAlerts";
 import { getRoutedToMeSummary } from "@/lib/notifications";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { dressDayFor } from "@/lib/dressCode";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -28,6 +29,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         tracksInternalMemos: true,
         tracksDtr: true,
         tracksDipcr: true,
+        tracksSena: true,
+        tracksCallLog: true,
       },
     }),
   ]);
@@ -46,8 +49,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login?stale=1");
   if (!user.isActive) redirect("/login?disabled=1");
 
+  // Resolved per request, here rather than in the root layout: this layout is
+  // already dynamic (it reads the session), so the day is recomputed on every
+  // navigation without forcing the login page out of static rendering. The
+  // variables it selects cascade from this element down to the sidebar.
+  const dressDay = dressDayFor();
+
   return (
-    <div className="flex">
+    <div className="flex" data-day={dressDay}>
       <Sidebar
         overdue={overdue}
         dueSoon={dueSoon}
@@ -57,6 +66,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         tracksInternalMemos={office?.tracksInternalMemos ?? false}
         tracksDtr={office?.tracksDtr ?? false}
         tracksDipcr={office?.tracksDipcr ?? false}
+        tracksSena={office?.tracksSena ?? false}
+        tracksCallLog={office?.tracksCallLog ?? false}
       />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <Topbar

@@ -47,6 +47,11 @@ async function main() {
       tracksDtr: true,
       // tracksDipcr: the performance commitment matrix is MWPTD's.
       tracksDipcr: true,
+      // tracksSena: MWPTD runs the SENA conciliation conferences; no other
+      // division holds them.
+      tracksSena: true,
+      // tracksCallLog: the telephone log is MWPTD's register too.
+      tracksCallLog: true,
     },
   });
 

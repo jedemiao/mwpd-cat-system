@@ -14,15 +14,15 @@ datasource db {
 }
 
 enum Role {
-  ADMIN            // full system access, manages offices/users
-  DIVISION_CHIEF   // approves, signs off, sees all division data
-  RECORDS_STAFF    // ADAS III / intake & filing (Incoming/Outgoing entry)
-  STAFF            // field staff, logs activities, requests leave
+  ADMIN // full system access, manages offices/users
+  DIVISION_CHIEF // approves, signs off, sees all division data
+  RECORDS_STAFF // ADAS III / intake & filing (Incoming/Outgoing entry)
+  STAFF // field staff, logs activities, requests leave
 }
 
 enum DocComplexity {
-  SIMPLE           // ARTA: 3 working days
-  COMPLEX          // ARTA: 7 working days
+  SIMPLE // ARTA: 3 working days
+  COMPLEX // ARTA: 7 working days
   HIGHLY_TECHNICAL // ARTA: 20 working days
 }
 
@@ -45,8 +45,7 @@ enum DocumentOrigin {
 // either — the Leave module stays the only place a leave can be created, and
 // there is exactly one source of truth for who is out.
 enum ActivityCategory {
-  JOB_FAIR
-  PEOS // Pre-Employment Orientation Seminar
+  INSPECTION
   QUICK_RESPONSE_TEAM
   CONFERENCE_TRAINING
   MEETINGS
@@ -59,7 +58,7 @@ enum ActivityCategory {
 // semester ("D/IPCR 2ND SEM"), and the six month columns on it are the months
 // of that half — so the semester decides which months the matrix shows.
 enum DipcrSemester {
-  FIRST  // January–June
+  FIRST // January–June
   SECOND // July–December
 }
 
@@ -198,14 +197,28 @@ model Office {
   incomingInternalSeqCounter Int @default(0)
   outgoingSeqCounter         Int @default(0)
 
-  users         User[]
-  incoming      IncomingDocument[]
-  outgoing      OutgoingDocument[]
-  activities    Activity[]
-  leaves        Leave[]
-  internalMemos InternalMemo[]
-  dtrRecords    DtrRecord[]
+  // Whether this office runs SENA (Single Entry Approach) conciliation and
+  // keeps the conference register for it. MWPTD's; nobody else holds the
+  // conferences, so the module and its nav entry are omitted elsewhere rather
+  // than shown leading to an empty ledger — same treatment as tracksDtr.
+  tracksSena Boolean @default(false)
+
+  // Whether this office keeps the telephone call log. Also MWPTD's. Kept as a
+  // separate flag from tracksSena even though one office has both today: they
+  // are different registers answering different questions, and an office could
+  // plausibly keep a call log without running conciliation.
+  tracksCallLog Boolean @default(false)
+
+  users           User[]
+  incoming        IncomingDocument[]
+  outgoing        OutgoingDocument[]
+  activities      Activity[]
+  leaves          Leave[]
+  internalMemos   InternalMemo[]
+  dtrRecords      DtrRecord[]
   dipcrIndicators DipcrIndicator[]
+  senaConferences SenaConference[]
+  callLogs        CallLog[]
 }
 
 model User {
@@ -214,16 +227,16 @@ model User {
   office       Office   @relation(fields: [officeId], references: [id])
   name         String
   username     String   @unique
-  email        String?  // contact detail and identifier; there is NO SMTP in this
-                        // system, so nothing is ever sent here. Nullable because
-                        // the seeded roster predates the field.
+  email        String? // contact detail and identifier; there is NO SMTP in this
+  // system, so nothing is ever sent here. Nullable because
+  // the seeded roster predates the field.
   passwordHash String
   role         Role     @default(STAFF)
   // Staff who leave are deactivated, never deleted: Leave, AuditLog,
   // IncomingRoutedStaff and ActivityAssignee all hold FKs to User, and their
   // history has to stay readable. Blocks sign-in; leaves every record intact.
   isActive     Boolean  @default(true)
-  avatarUrl    String?  // MinIO object key for the profile photo
+  avatarUrl    String? // MinIO object key for the profile photo
   createdAt    DateTime @default(now())
 
   routedIncoming     IncomingRoutedStaff[]
@@ -234,6 +247,7 @@ model User {
   dipcrAccountable   DipcrAccountable[]
   auditLogs          AuditLog[]
   formTemplates      FormTemplate[]
+  senaMediations     SenaConference[]      @relation("SenaMediator")
 }
 
 // One row of the D/IPCR (Division / Individual Performance Commitment and
@@ -247,9 +261,9 @@ model User {
 // named for one semester and could not answer "what did the division do in
 // August" without reading every column of every row.
 model DipcrIndicator {
-  id       String        @id @default(cuid())
+  id       String @id @default(cuid())
   officeId String
-  office   Office        @relation(fields: [officeId], references: [id])
+  office   Office @relation(fields: [officeId], references: [id])
 
   year     Int
   semester DipcrSemester
@@ -258,8 +272,8 @@ model DipcrIndicator {
   // tables. The page groups by them to reproduce the sheet's merged cells.
   // A PAP is renamed rarely, and when it is, it is renamed on its own rows —
   // cheaper than a table nobody would otherwise open.
-  section          String  // "CORE FUNCTIONS"
-  pap              String  // "Forging of MOU/MOA Partnerships"
+  section          String // "CORE FUNCTIONS"
+  pap              String // "Forging of MOU/MOA Partnerships"
   // Column B — the target and its measure, as written.
   successIndicator String
   // Column C. Decimal, not Float: this is money, and it is stated to the
@@ -304,8 +318,8 @@ model DipcrAccomplishment {
   // 1–12. Stored as the calendar month rather than an offset into the
   // semester, so a cell means the same thing whichever half of the year it
   // belongs to and nothing has to be re-based when the semester changes.
-  month     Int
-  narrative String
+  month       Int
+  narrative   String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -326,9 +340,9 @@ model DipcrAccomplishment {
 // meaningful on its own — filtered, printed, or read out of the audit log —
 // without needing a parent row to explain it.
 model DtrRecord {
-  id                  String   @id @default(cuid())
-  officeId            String
-  office              Office   @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
   // First day of the month the DTR covers, at UTC midnight — the period, not a
   // date anything happened on. Every query normalises to the 1st, so "July
@@ -341,12 +355,12 @@ model DtrRecord {
   dateFiled           DateTime?
   dateSubmittedToHr   DateTime?
   personnelId         String
-  personnel           User     @relation(fields: [personnelId], references: [id])
+  personnel           User      @relation(fields: [personnelId], references: [id])
   // The sheet's "Submitted and checked" Yes/No.
-  submittedAndChecked Boolean  @default(false)
+  submittedAndChecked Boolean   @default(false)
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // One DTR per person per month. This is what makes the roster view's "has
   // this person filed?" a lookup rather than a guess, and what stops the same
@@ -357,54 +371,54 @@ model DtrRecord {
 }
 
 model IncomingDocument {
-  id               String        @id @default(cuid())
-  officeId         String
-  office           Office        @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
-  dateReceived     DateTime
+  dateReceived      DateTime
   // Clock time the document was accepted at the desk, "HH:MM" 24-hour.
   // Deliberately NOT folded into dateReceived: it is captured now, but the
   // ARTA calculation still runs off the date alone. Whether a 4:50 PM Friday
   // arrival counts as Friday or Monday is office policy, not an engineering
   // choice — see docs/PHP-TRACKER-ADOPTION.md. Do not wire it in by guessing.
-  timeReceived     String?
+  timeReceived      String?
   // The desk officer who accepted it, distinct from routedTo (who has to act
   // on it) and from the audit trail (who typed the record).
-  receivedById     String?
-  receivedBy       User?         @relation("IncomingReceivedBy", fields: [receivedById], references: [id])
-  origin           DocumentOrigin @default(EXTERNAL)
+  receivedById      String?
+  receivedBy        User?                 @relation("IncomingReceivedBy", fields: [receivedById], references: [id])
+  origin            DocumentOrigin        @default(EXTERNAL)
   // Sending office or agency — "DMW - Ortigas", an employer, an email address.
-  originAgency     String?
+  originAgency      String?
   // Person who signed the document, as printed on it.
-  signatory        String?
+  signatory         String?
   // Type code from src/lib/documentTypeCodes.ts (e.g. "M", "A", "MOM"). Was
   // previously only consumed to build routingNumber and then thrown away,
   // which left the ledger unable to answer "show me every advisory".
-  documentType     String?
+  documentType      String?
   // Free-text specification, used only when documentType == "O" (Others).
   // Required at the point of selection rather than optional — unlike
   // Activity.categoryOther, "Others" here is a deliberate pick from the legend
   // and never a default, so an unexplained one would say nothing at all.
   documentTypeOther String?
-  routingNumber    String        @unique // e.g. 070126-L-008
-  documentTitle    String
-  routedTo         IncomingRoutedStaff[]         // Division Chief may route to more than one staff member
-  instructions     String?                       // DC's required actions — owned by Division Chief
-  complexity       DocComplexity @default(SIMPLE)
-  leadTimeDays     Int           @default(3)   // derived from complexity, editable
-  dueDate          DateTime?                    // dateReceived + leadTimeDays, computed on save
-  numCorrections   Int           @default(0)
-  progressRemarks  String?                       // what is happening with it (routing state)
-  notes            String?                       // filing state, kept separate from progressRemarks
-  dateCompleted    DateTime?
-  dcSignOffDate    DateTime?                     // when the Division Chief signed off, distinct from ADAS III record-keeping
-  scannedCopyUrl   String?                       // MinIO object key
-  filed            Boolean       @default(false)
+  routingNumber     String                @unique // e.g. 070126-L-008
+  documentTitle     String
+  routedTo          IncomingRoutedStaff[] // Division Chief may route to more than one staff member
+  instructions      String? // DC's required actions — owned by Division Chief
+  complexity        DocComplexity         @default(SIMPLE)
+  leadTimeDays      Int                   @default(3) // derived from complexity, editable
+  dueDate           DateTime? // dateReceived + leadTimeDays, computed on save
+  numCorrections    Int                   @default(0)
+  progressRemarks   String? // what is happening with it (routing state)
+  notes             String? // filing state, kept separate from progressRemarks
+  dateCompleted     DateTime?
+  dcSignOffDate     DateTime? // when the Division Chief signed off, distinct from ADAS III record-keeping
+  scannedCopyUrl    String? // MinIO object key
+  filed             Boolean               @default(false)
 
-  outgoingReplies  OutgoingDocument[]            // documents dispatched in response
-  linkedActivities IncomingDocumentActivity[]    // the activities this document concerns
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  outgoingReplies  OutgoingDocument[] // documents dispatched in response
+  linkedActivities IncomingDocumentActivity[] // the activities this document concerns
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
 }
 
 // join table: a document can concern several activities and an activity can
@@ -435,71 +449,71 @@ model OutgoingDocumentActivity {
 }
 
 model OutgoingDocument {
-  id                 String            @id @default(cuid())
-  officeId           String
-  office             Office            @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
-  dateReleased       DateTime
-  routingNumber      String            @unique // e.g. 070226-MWPTD-DC-004
+  dateReleased      DateTime
+  routingNumber     String   @unique // e.g. 070226-MWPTD-DC-004
   // Type code from src/lib/documentTypeCodes.ts, stored so the ledger can be
   // filtered by type — the incoming side already does this.
-  documentType       String?
+  documentType      String?
   // See IncomingDocument.documentTypeOther — same rule.
-  documentTypeOther  String?
-  documentTitle      String
-  instructions       String?
+  documentTypeOther String?
+  documentTitle     String
+  instructions      String?
 
   // Receipt acknowledgement: who took delivery, where, and when. The office's
   // own outgoing register records all four, and they are how it answers "did
   // this actually reach them?" — a released document with no receipt is the
   // thing a clerk chases. All nullable: a document is logged when it leaves,
   // and the receipt comes back later, if at all.
-  receivingOffice    String?           // recipient division/office — "PROTECTION", "FAD", "ORD"
-  receivedBy         String?           // person who took delivery, free text
-  receivedDate       DateTime?         // date the recipient acknowledged it
-  receivedTime       String?           // "10:54 PM" — clock time, same shape as IncomingDocument.timeReceived
+  receivingOffice String? // recipient division/office — "PROTECTION", "FAD", "ORD"
+  receivedBy      String? // person who took delivery, free text
+  receivedDate    DateTime? // date the recipient acknowledged it
+  receivedTime    String? // "10:54 PM" — clock time, same shape as IncomingDocument.timeReceived
 
-  progressRemarks    String?
-  scannedCopyUrl     String?
-  filed              Boolean           @default(false)
+  progressRemarks String?
+  scannedCopyUrl  String?
+  filed           Boolean @default(false)
 
-  relatedIncomingId  String?
-  relatedIncoming    IncomingDocument? @relation(fields: [relatedIncomingId], references: [id])
+  relatedIncomingId String?
+  relatedIncoming   IncomingDocument? @relation(fields: [relatedIncomingId], references: [id])
 
-  linkedActivities   OutgoingDocumentActivity[]  // the activities this dispatch concerns
+  linkedActivities OutgoingDocumentActivity[] // the activities this dispatch concerns
 
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Activity {
-  id                String    @id @default(cuid())
-  officeId          String
-  office            Office    @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
-  date              DateTime // start date; single-day activities just use this
-  endDate           DateTime? // set only for multi-day activities; must be >= date
-  activityName      String
+  date                DateTime // start date; single-day activities just use this
+  endDate             DateTime? // set only for multi-day activities; must be >= date
+  activityName        String
   // Defaults to OTHERS so every pre-existing row stays valid without a
   // backfill guess: "unclassified" is honest, a fabricated category is not.
-  category          ActivityCategory @default(OTHERS)
+  category            ActivityCategory @default(OTHERS)
   // Free-text specification, used only when category == OTHERS — same shape as
   // Leave.typeOther. Optional rather than required (unlike leave's, where OTHER
   // is a deliberate pick among five named types): OTHERS is this column's
   // default and means "unclassified", so demanding text would tax every
   // activity nobody bothered to categorise.
-  categoryOther     String?
-  location          String?   // where it happens — "Butuan City Hall"
-  remarks           String?
-  officeOrderUrl    String?
-  memoUrl           String?
+  categoryOther       String?
+  location            String? // where it happens — "Butuan City Hall"
+  remarks             String?
+  officeOrderUrl      String?
+  memoUrl             String?
   inspectionReportUrl String?
 
-  assignees         ActivityAssignee[]
-  linkedIncoming    IncomingDocumentActivity[]
-  linkedOutgoing    OutgoingDocumentActivity[]
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  assignees      ActivityAssignee[]
+  linkedIncoming IncomingDocumentActivity[]
+  linkedOutgoing OutgoingDocumentActivity[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 }
 
 // join table: an activity can have multiple people in charge
@@ -524,38 +538,38 @@ model IncomingRoutedStaff {
 }
 
 model Leave {
-  id             String    @id @default(cuid())
-  officeId       String
-  office         Office    @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
   dateFiled      DateTime?
   leaveStart     DateTime
   leaveEnd       DateTime?
   type           LeaveType @default(OTHER)
-  typeOther      String?               // free-text specification, used when type == OTHER
+  typeOther      String? // free-text specification, used when type == OTHER
   personnelId    String
   personnel      User      @relation(fields: [personnelId], references: [id])
   scannedCopyUrl String?
 
-  createdAt      DateTime  @default(now())
+  createdAt DateTime @default(now())
 }
 
 model InternalMemo {
-  id               String    @id @default(cuid())
-  officeId         String
-  office           Office    @relation(fields: [officeId], references: [id])
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
 
   dateReleased     DateTime
-  memorandumNumber Int                   // manually entered; unique within the office, not globally (see routingNumber)
+  memorandumNumber Int // manually entered; unique within the office, not globally (see routingNumber)
   documentTitle    String
   instructions     String?
   receivedBy       String?
   progressRemarks  String?
   scannedCopyUrl   String?
-  filed            Boolean   @default(false)
+  filed            Boolean  @default(false)
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([officeId, memorandumNumber])
 }
@@ -564,16 +578,16 @@ model InternalMemo {
 // other table here: these are standard DMW forms reused by every office,
 // not office-specific records. uploadedBy still gives an audit trail.
 model FormTemplate {
-  id           String   @id @default(cuid())
-  number       Int                        // display order, matches the source sheet's "Number" column
+  id           String @id @default(cuid())
+  number       Int // display order, matches the source sheet's "Number" column
   title        String
-  fileUrl      String                     // MinIO object key, "shared/forms/..." prefix
-  fileName     String                     // original filename, for display/download naming
+  fileUrl      String // MinIO object key, "shared/forms/..." prefix
+  fileName     String // original filename, for display/download naming
   uploadedById String
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Optional but recommended for a government accountability system:
@@ -583,10 +597,121 @@ model AuditLog {
   officeId   String
   userId     String
   user       User     @relation(fields: [userId], references: [id])
-  action     String   // "CREATE" | "UPDATE" | "DELETE" | "READ"
-  entityType String   // "IncomingDocument" | "OutgoingDocument" | ... | "File"
+  action     String // "CREATE" | "UPDATE" | "DELETE" | "READ"
+  entityType String // "IncomingDocument" | "OutgoingDocument" | ... | "File"
   entityId   String
   ipAddress  String?
   details    Json?
   createdAt  DateTime @default(now())
+}
+
+// How a SENA conference ended. The sheet records SETTLED, FOR 2ND CON and
+// WITHDRAWN, and leaves the cell blank for a conference that is on the calendar
+// but hasn't happened yet — that blank is SCHEDULED here, so "what is booked
+// this week" is a query rather than a search for empty cells.
+//
+// NOT_SETTLED is not in the sheet but is a real SENA outcome: the parties meet
+// and reach no agreement, and the case moves on. Without it those conferences
+// have nowhere to go but WITHDRAWN, which means something different (the
+// complainant pulled out) and would misreport the office's settlement rate.
+enum SenaStatus {
+  SCHEDULED
+  SETTLED
+  FOR_SECOND_CONFERENCE
+  NOT_SETTLED
+  WITHDRAWN
+}
+
+// One row per conference, exactly as the office's sheet keeps it — not one row
+// per case. A case that needs a second conference is a second row, the way they
+// already enter it.
+//
+// previousConferenceId is what the sheet cannot express. There, a 2nd
+// conference is recognisable as a follow-up only because a reader notices the
+// same complainant and respondent further down the page; nothing links them, so
+// nothing can total a case or list what is still open. This is the same move
+// OutgoingDocument.relatedIncomingId makes over the original tracker's manual
+// note: the register keeps its shape, and the link it implied becomes real.
+//
+// Deliberately NOT unique: a chain (1st -> 2nd -> 3rd) is the normal case, and
+// constraining it would also forbid correcting a mis-linked row by pointing a
+// second one at the same parent while the first is being fixed.
+model SenaConference {
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
+
+  // The sheet's month header plus a day number; stored as a real date so a
+  // month view is a range query and December to January doesn't need special
+  // handling.
+  conferenceDate   DateTime
+  // The sheet's TIME dropdown, stored 24-hour ("13:30") rather than as the
+  // "1:30 PM" it displays. Two reasons: it sorts lexically, so a day's
+  // conferences come back in the order they happen without a lookup table; and
+  // the display format stays a rendering choice. See src/lib/senaSchedule.ts.
+  conferenceTime   String
+  // 1st, 2nd, 3rd. An Int rather than an enum so a third or fourth conference
+  // needs no migration — the sheet only ever shows 1st and 2nd, but nothing
+  // about SENA caps it there.
+  conferenceNumber Int      @default(1)
+
+  // The dropdown in the sheet lists staff by name; here it is the staff record
+  // itself, so a conciliator's conferences are a real relation. Same treatment
+  // as DtrRecord.personnel.
+  mediatorId String
+  mediator   User   @relation("SenaMediator", fields: [mediatorId], references: [id])
+
+  // Free text on both sides. The complainant is a worker and the respondent is
+  // usually a recruitment agency, but neither is a record this app holds — the
+  // agencies are not offices and the workers are not users.
+  complainant String
+  respondent  String
+
+  status SenaStatus @default(SCHEDULED)
+
+  // Peso amount, only meaningful when status is SETTLED. Decimal, not Float:
+  // this is money, and 16000.00 must not come back as 15999.999999999998.
+  amountSettled Decimal? @db.Decimal(12, 2)
+
+  previousConferenceId String?
+  previousConference   SenaConference?  @relation("SenaFollowUp", fields: [previousConferenceId], references: [id])
+  followUps            SenaConference[] @relation("SenaFollowUp")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The register is read one office at a time, newest first.
+  @@index([officeId, conferenceDate])
+  @@index([previousConferenceId])
+}
+
+// The telephone log. The plainest register in the app: five columns, no
+// dropdowns in the source sheet, and no links to anything else.
+//
+// concern and remarks are free text on purpose. Their values repeat a lot
+// ("SENA UPDATE", "FORWARDED TO CCO") and a picklist would tidy the reporting,
+// but the sheet has none, the vocabulary is still moving, and a wrong picklist
+// makes a clerk pick "Others" and type the real answer anyway. Worth revisiting
+// once a few months of entries show which values have actually settled.
+model CallLog {
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
+
+  callDate DateTime
+
+  // String, never a number. The sheet's numbers are mobile numbers with a
+  // leading zero ("09653144676"), and anything numeric eats it — which is
+  // exactly why some rows in the sheet have already lost theirs ("9175218138").
+  phoneNumber String
+  // "UNKNOWN" is a normal, frequent value here rather than missing data: the
+  // call was logged, the caller simply didn't give a name.
+  callerName  String
+  concern     String
+  remarks     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([officeId, callDate])
 }

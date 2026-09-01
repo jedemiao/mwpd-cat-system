@@ -250,3 +250,25 @@ export function PrinterIcon(props: IconProps) {
     </svg>
   );
 }
+
+// SENA — a balance/scale, for conciliation between two parties.
+export function ScaleIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 4v16" />
+      <path d="M6 20h12" />
+      <path d="M4 8h16" />
+      <path d="M4 8l-2.5 5.5a3 3 0 0 0 5 0Z" />
+      <path d="M20 8l2.5 5.5a3 3 0 0 1-5 0Z" />
+    </svg>
+  );
+}
+
+// Call log — a handset.
+export function PhoneIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5Z" />
+    </svg>
+  );
+}
