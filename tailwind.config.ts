@@ -45,6 +45,25 @@ const config: Config = {
           500: "#3d99f5",
           600: "#2a7fd6",
         },
+        // The daily dress-code surface and the text that sits on it. Both are
+        // CSS variables rather than fixed hex because they change per weekday —
+        // see src/lib/dressCode.ts for the schedule and globals.css for the
+        // values. The `rgb(... / <alpha-value>)` form is what keeps the opacity
+        // modifiers working (`bg-dayfg/15`, `text-dayfg/70`), which the sidebar
+        // leans on heavily; a plain `var(--day-surface)` would break them all.
+        //
+        // `day`/`dayfg` dress the sidebar; `dayaccent` dresses filled buttons.
+        // They are separate because a pale surface that works as a whole panel
+        // is unreadable as a small control — see the Monday note in globals.css.
+        //
+        // Still NOT applied to the login panel or the calendar's today pill:
+        // the pill sits among category chips that already carry meaning.
+        day: "rgb(var(--day-surface) / <alpha-value>)",
+        dayfg: "rgb(var(--day-fg) / <alpha-value>)",
+        dayaccent: {
+          DEFAULT: "rgb(var(--day-accent) / <alpha-value>)",
+          600: "rgb(var(--day-accent-hover) / <alpha-value>)",
+        },
         surface: "#f3f4f7",
         ink: {
           900: "#212631",

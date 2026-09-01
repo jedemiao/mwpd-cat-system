@@ -31,8 +31,10 @@
     @apply inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Wears the day's accent (see the dress-code block below). White text holds
+     on every day — 7.20:1 at the weakest, better than the indigo it replaces. */
   .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-600;
+    @apply btn bg-dayaccent text-white hover:bg-dayaccent-600;
   }
 
   .btn-secondary {
@@ -122,6 +124,94 @@
   .stamp-chip-duesoon {
     @apply stamp-chip border-duesoon/50 text-duesoon dark:border-duesoon/40 dark:text-[#dcb256];
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Daily dress code
+   ---------------------------------------------------------------------------
+   The sidebar takes its colour from the office's weekly dress code. The day is
+   resolved server-side in src/lib/dressCode.ts (Asia/Manila, not the server's
+   own clock) and applied as data-day on the dashboard layout's root element, so
+   these variables cascade to the sidebar without any client JS and without a
+   flash on load.
+
+   Values are space-separated RGB channels, not hex, because Tailwind composes
+   them with <alpha-value> — that is what makes bg-dayfg/15 and text-dayfg/70
+   work. See the `day` / `dayfg` entries in tailwind.config.ts.
+
+   The base rule carries the fallback (the app's own indigo, white text) and
+   each day overrides only what differs. Friday and weekends deliberately have
+   no override: Friday's "any colour" is a per-user pick that isn't built yet,
+   and a weekend has no uniform to reflect.
+   --------------------------------------------------------------------------- */
+/* Two independent pairs, because a panel and a button are different problems.
+   --day-surface / --day-fg   the sidebar: a large panel with its own edge, so
+                              a pale ground works and the text inverts onto it.
+   --day-accent / -hover      filled buttons: small shapes sitting on a white
+                              card, which need enough weight to read as a
+                              control at all. Always carries white text.
+
+   These are equal on four days and diverge only on Monday — see below. The
+   defaults live on :root rather than on [data-day] so that anything rendered
+   outside the dashboard (the login page's Sign in button) still resolves. */
+:root {
+  --day-surface: 94 92 208; /* #5e5cd0 — the app's own indigo */
+  --day-fg: 255 255 255;
+  --day-accent: 94 92 208;
+  --day-accent-hover: 75 73 180; /* #4b49b4 — the existing primary-600 */
+}
+
+/* Monday is the one inverted day: piña cream carrying dark text. It scores
+   better than any white-text day here (nav items 6.10:1) — the authentic
+   reading and the most readable one happen to coincide.
+
+   It is also the one day surface and accent part ways. Cream cannot be a
+   button: against a white card it separates at 1.39:1, so the control would
+   have no visible shape, and white on cream is the same 1.39:1, so the label
+   would be unreadable. The button therefore takes the deep end of the same
+   cloth — dark enough to read as a control, and kept off Thursday's tobacco so
+   the two days don't collapse into each other. */
+[data-day="mon"] {
+  --day-surface: 228 218 199; /* #e4dac7 */
+  --day-fg: 43 36 25; /* #2b2419 */
+  --day-accent: 74 63 48; /* #4a3f30 — deep piña */
+  --day-accent-hover: 59 50 38; /* #3b3226 */
+}
+
+[data-day="tue"] {
+  --day-surface: 30 82 136; /* #1e5288 */
+  --day-accent: 30 82 136;
+  --day-accent-hover: 23 64 108; /* #17406c */
+}
+
+[data-day="wed"] {
+  --day-surface: 91 63 158; /* #5b3f9e */
+  --day-accent: 91 63 158;
+  --day-accent-hover: 74 51 127; /* #4a337f */
+}
+
+[data-day="thu"] {
+  --day-surface: 100 85 65; /* #645541 */
+  --day-accent: 100 85 65;
+  --day-accent-hover: 79 67 52; /* #4f4334 */
+}
+
+/* In dark mode a cream slab beside a dark app reads as a light leak rather than
+   as chrome, so Monday drops to a deep piña and turns its text back to white.
+   Kept distinct from Thursday's tobacco so the two days don't converge. */
+.dark [data-day="mon"] {
+  --day-surface: 74 63 48; /* #4a3f30 */
+  --day-fg: 255 255 255;
+}
+
+/* Monday's weave. What identifies a barong is the cloth, not the colour, so the
+   fill carries the piña weave rather than sitting flat. Drawn in the day's own
+   foreground colour at very low alpha, which means it darkens on cream and
+   lightens on the dark-mode piña without a second rule. */
+[data-day="mon"] .dress-surface {
+  background-image:
+    repeating-linear-gradient(45deg, rgb(var(--day-fg) / 0.055) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgb(var(--day-fg) / 0.04) 0 2px, transparent 2px 5px);
 }
 
 /* ---------------------------------------------------------------------------

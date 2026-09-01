@@ -160,10 +160,12 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="grid min-h-screen bg-surface dark:bg-ink-900 lg:grid-cols-[minmax(320px,420px)_1fr]">
-      {/* Brand panel — the register's civic identity. Stays on the primary
-          color in both themes; hidden on narrow screens (see the compact
-          lockup in the form column). */}
-      <aside className="hidden flex-col justify-between bg-primary p-10 text-white lg:flex xl:p-12">
+      {/* Brand panel — the register's civic identity. Wears the office's dress
+          code for the day (src/lib/dressCode.ts), set as data-day by the server
+          layout beside this file; on Monday it inverts to dark text on piña
+          cream, exactly as the sidebar does. Hidden on narrow screens (see the
+          compact lockup in the form column). */}
+      <aside className="hidden flex-col justify-between bg-day dress-surface p-10 text-dayfg lg:flex xl:p-12">
         <div className="flex items-center gap-4">
           <Image
             src="/dmw_logo.png"
@@ -175,7 +177,7 @@ export default function LoginPage() {
           />
           {/* Just the department here — the regional office is the headline
               below, and repeating it in both places reads as a mistake. */}
-          <p className="text-[12px] uppercase leading-tight tracking-[0.04em] text-white/90">
+          <p className="text-[12px] uppercase leading-tight tracking-[0.04em] text-dayfg/90">
             <span className="whitespace-nowrap">Department of Migrant Workers</span>
           </p>
         </div>
@@ -186,16 +188,16 @@ export default function LoginPage() {
               and there is no office to personalise the page with. Sized a step
               down from the old two-word name — this one is 24 characters and
               would otherwise overflow the panel at the narrow end of lg. */}
-          <h1 className="max-w-[12ch] font-display text-4xl font-extrabold leading-[1.05] text-white xl:text-5xl">
+          <h1 className="max-w-[12ch] font-display text-4xl font-extrabold leading-[1.05] text-dayfg xl:text-5xl">
             DMW Regional Office XIII
           </h1>
-          <div className="my-5 h-0.5 w-16 bg-white/40" />
-          <p className="max-w-[34ch] text-white/85">
+          <div className="my-5 h-0.5 w-16 bg-dayfg/40" />
+          <p className="max-w-[34ch] text-dayfg/85">
             Caraga — communication and activity records tracker.
           </p>
         </div>
 
-        <p className="text-xs tracking-[0.06em] text-white/60">REPUBLIC OF THE PHILIPPINES</p>
+        <p className="text-xs tracking-[0.06em] text-dayfg/60">REPUBLIC OF THE PHILIPPINES</p>
       </aside>
 
       <Suspense fallback={null}>
