@@ -33,7 +33,16 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
 
   const q = searchParams.q?.trim() ?? "";
   const category = searchParams.category && isActivityCategory(searchParams.category) ? searchParams.category : "";
-  const view = searchParams.view === "calendar" ? "calendar" : "list";
+  // The calendar is the landing view. This is a monthly activity register and
+  // the question staff arrive with is what the month looks like, not a row
+  // listing — so the bare /activities URL (the sidebar entry, the post-save
+  // redirect) opens the grid.
+  //
+  // Consequence worth knowing before editing below: "list" is now the mode
+  // that must be asked for by name. Every link meaning the list — the toggle,
+  // Clear, pagination, the print href, the search form — carries view=list
+  // explicitly, because dropping the param no longer lands there.
+  const view = searchParams.view === "list" ? "list" : "calendar";
   const isPrint = searchParams.print === "1";
   // Carried through every calendar month link, so paging from July to August
   // doesn't silently drop the filter the clerk is looking at.
@@ -131,7 +140,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
   const backHref =
     view === "calendar"
       ? `/activities?view=calendar&month=${monthParam}${extraQuery}`
-      : listHref("/activities", { q, category });
+      : listHref("/activities", { q, category, view: "list" });
   // The calendar renders one month whole, so its printout is that month, not a
   // row count — hence the different header title and total between the views.
   const printTotal = view === "calendar" ? activities.length : total;
@@ -155,7 +164,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                 searchParams={{
                   q,
                   category,
-                  view: view === "calendar" ? "calendar" : undefined,
+                  view,
                   month: view === "calendar" ? monthParam : undefined,
                 }}
               />
@@ -168,7 +177,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <form action="/activities" method="get" className="flex flex-wrap gap-2">
-              {view === "calendar" && <input type="hidden" name="view" value="calendar" />}
+              <input type="hidden" name="view" value={view} />
               {view === "calendar" && <input type="hidden" name="month" value={monthParam} />}
               <div className="relative w-72">
                 <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400 dark:text-white/30" />
@@ -193,7 +202,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
               </button>
               {(q || category) && (
                 <Link
-                  href={view === "calendar" ? `/activities?view=calendar&month=${monthParam}` : "/activities"}
+                  href={view === "calendar" ? `/activities?view=calendar&month=${monthParam}` : "/activities?view=list"}
                   className="btn-secondary"
                 >
                   Clear
@@ -202,7 +211,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
             </form>
 
             <div className="flex gap-2">
-              <Link href={listHref("/activities", { q, category })} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
+              <Link href={listHref("/activities", { q, category, view: "list" })} className={view === "list" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>
                 List
               </Link>
               <Link
@@ -334,7 +343,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
           </div>
 
           {!isPrint && (
-            <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q, category }} />
+            <Pagination basePath="/activities" page={page} totalPages={totalPages} total={total} searchParams={{ q, category, view: "list" }} />
           )}
         </>
       )}

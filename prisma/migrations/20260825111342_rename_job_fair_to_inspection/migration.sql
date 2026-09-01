@@ -1,0 +1,11 @@
+-- AlterEnum: rename JOB_FAIR -> INSPECTION.
+--
+-- Hand-written rather than the drop-and-recreate `prisma migrate diff` emits
+-- for this change. Prisma cannot tell a rename from a delete plus an add, so
+-- its version recreates the type and recasts the column with
+-- `USING ("category"::text::"ActivityCategory_new")` — which fails outright on
+-- any row still holding 'JOB_FAIR'. RENAME VALUE is an in-place relabel: it
+-- carries existing rows across, keeps the value's sort position (so INSPECTION
+-- stays first in the legend), and needs no cast, no default drop, and no
+-- exclusive rewrite of the table.
+ALTER TYPE "ActivityCategory" RENAME VALUE 'JOB_FAIR' TO 'INSPECTION';

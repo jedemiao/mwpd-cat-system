@@ -8,8 +8,7 @@
 // ActivityCategory enum, which is exactly how documentTypeCodes.ts works.
 
 export const ACTIVITY_CATEGORIES = [
-  "JOB_FAIR",
-  "PEOS",
+  "INSPECTION",
   "QUICK_RESPONSE_TEAM",
   "CONFERENCE_TRAINING",
   "MEETINGS",
@@ -25,8 +24,7 @@ export function isActivityCategory(value: string): value is ActivityCategoryValu
 }
 
 export const ACTIVITY_CATEGORY_LABELS: Record<ActivityCategoryValue, string> = {
-  JOB_FAIR: "Job Fair",
-  PEOS: "PEOS",
+  INSPECTION: "Inspection",
   QUICK_RESPONSE_TEAM: "Quick-Response Team",
   CONFERENCE_TRAINING: "Conference / Training",
   MEETINGS: "Meetings",
@@ -47,7 +45,6 @@ export function activityCategoryLabel(category: ActivityCategoryValue, categoryO
 // Spelled out where there is room for it (the entry form's dropdown); the
 // short label above is what fits on a calendar chip and in the legend.
 export const ACTIVITY_CATEGORY_DESCRIPTIONS: Partial<Record<ActivityCategoryValue, string>> = {
-  PEOS: "Pre-Employment Orientation Seminar",
   QUICK_RESPONSE_TEAM: "QRT deployment",
   SKELETON_FORCE: "Reduced office coverage",
 };
@@ -63,8 +60,8 @@ export const ACTIVITY_CATEGORY_DESCRIPTIONS: Partial<Record<ActivityCategoryValu
 // matter of remembering.
 //
 // Within the palette, saturation encodes what kind of day it is. Work the
-// office goes out and does is saturated (fuchsia / violet / orange / cyan /
-// teal); days that are really a statement about office coverage rather than an
+// office goes out and does is saturated (fuchsia / orange / cyan / teal);
+// days that are really a statement about office coverage rather than an
 // activity are muted greys (slate / stone / zinc). So the calendar separates
 // "we are doing things" from "we are thin on the ground" before anyone reads a
 // single label.
@@ -72,10 +69,8 @@ export const ACTIVITY_CATEGORY_DESCRIPTIONS: Partial<Record<ActivityCategoryValu
 // Class strings are written out in full because Tailwind scans source text —
 // a composed `bg-${hue}-50` would be purged from the stylesheet.
 export const ACTIVITY_CATEGORY_CHIP: Record<ActivityCategoryValue, string> = {
-  JOB_FAIR:
+  INSPECTION:
     "border-l-fuchsia-500 bg-fuchsia-50 text-fuchsia-800 hover:bg-fuchsia-100 dark:bg-fuchsia-400/15 dark:text-fuchsia-200 dark:hover:bg-fuchsia-400/25",
-  PEOS:
-    "border-l-violet-500 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:bg-violet-400/15 dark:text-violet-200 dark:hover:bg-violet-400/25",
   QUICK_RESPONSE_TEAM:
     "border-l-orange-500 bg-orange-50 text-orange-800 hover:bg-orange-100 dark:bg-orange-400/15 dark:text-orange-200 dark:hover:bg-orange-400/25",
   CONFERENCE_TRAINING:
@@ -91,8 +86,7 @@ export const ACTIVITY_CATEGORY_CHIP: Record<ActivityCategoryValue, string> = {
 };
 
 export const ACTIVITY_CATEGORY_DOT: Record<ActivityCategoryValue, string> = {
-  JOB_FAIR: "bg-fuchsia-500",
-  PEOS: "bg-violet-500",
+  INSPECTION: "bg-fuchsia-500",
   QUICK_RESPONSE_TEAM: "bg-orange-500",
   CONFERENCE_TRAINING: "bg-cyan-500",
   MEETINGS: "bg-teal-500",
@@ -108,7 +102,7 @@ export const ACTIVITY_CATEGORY_DOT: Record<ActivityCategoryValue, string> = {
 //
 // Rose is the one warm red-ish hue on the calendar, which makes an absence the
 // thing that stands out on a month grid — the question the calendar gets asked
-// most often is who is out. It is the closest of these nine to an app semantic
+// most often is who is out. It is the closest of these eight to an app semantic
 // token (danger), but ARTA badges never render on this page, and a leave chip
 // is further distinguished by carrying a person's name rather than an activity.
 export const LEAVE_LEGEND_LABEL = "On Leave";

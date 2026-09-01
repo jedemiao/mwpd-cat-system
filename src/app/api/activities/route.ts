@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     data: {
       ...rest,
       // The specification belongs to OTHERS alone — a category change must not
-      // leave a stale "Team building" hanging off a Job Fair.
+      // leave a stale "Team building" hanging off an Inspection.
       categoryOther: (rest.category ?? "OTHERS") === "OTHERS" ? rest.categoryOther : null,
       officeId: session.user.officeId,
       date: startDate,
