@@ -41,9 +41,14 @@ export async function ensureBucket() {
 // resolve — not MINIO_ENDPOINT, which in the docker-compose deploy is the
 // Docker-internal service name "minio". Since the server can now be reached
 // on more than one address (see AUTH_TRUST_HOST in docker-compose.yml), the
-// signing target is derived per-request from whatever host/proto the
-// browser actually used — falling back to MINIO_PUBLIC_URL only when no
-// request context is available (e.g. a future non-HTTP caller).
+// signing target is derived per-request from whatever host/proto the browser
+// used.
+//
+// Callers pass that request context only when a reverse proxy is actually in
+// front (see /api/files/[...key]); without one, the browser's own origin
+// serves no bucket, so the fallback below is the correct answer rather than a
+// degraded one. It is what `npm run dev` uses: MINIO_PUBLIC_URL blank in
+// .env.local, so this resolves to MinIO's own host and port.
 const publicClients = new Map<string, Client>();
 
 function getPublicClient(publicUrl: URL): Client {

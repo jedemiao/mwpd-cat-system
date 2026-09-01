@@ -28,8 +28,22 @@ export async function GET(req: NextRequest, props: { params: Promise<{ key: stri
     entityId: key,
   });
 
+  // Sign against the address the browser actually used — but only when
+  // something in front of the app proxies /mwpd-scans/ back to MinIO. That is
+  // nginx's job and nginx's alone (see nginx.conf), and X-Forwarded-Proto is
+  // what says nginx is there: it sets the header on every location it passes
+  // to the app, and the Next dev server sets none.
+  //
+  // Without that condition `npm run dev` signed URLs for its own origin
+  // (http://localhost:3001/mwpd-scans/...), which nothing serves — the dev
+  // server has no such route and no MinIO behind it, so every scanned copy
+  // 404'd. Falling through instead points the browser straight at MinIO, which
+  // is the only address that answers for the bucket when there's no proxy.
+  const forwardedProto = req.headers.get("x-forwarded-proto");
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "http";
-  const url = await getPresignedDownloadUrl(key, host ? { host, proto } : undefined);
+  const url = await getPresignedDownloadUrl(
+    key,
+    forwardedProto && host ? { host, proto: forwardedProto } : undefined,
+  );
   return NextResponse.redirect(url);
 }
