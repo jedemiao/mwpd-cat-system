@@ -14,6 +14,7 @@ import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_OTHER_CODE, documentTypeLabel } from "@/lib/documentTypeCodes";
+import { ClickableRow } from "@/components/ClickableRow";
 import {
   PIPELINE_STAGE_LABELS,
   PIPELINE_STAGES,
@@ -452,7 +453,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
             {docs.map((doc) => {
               const overdue = doc.dueDate && !doc.dateCompleted && doc.dueDate < today;
               return (
-                <tr key={doc.id}>
+                <ClickableRow key={doc.id} href={`/incoming/${doc.id}`}>
                   {detailedColumns ? (
                     <>
                       <td className="whitespace-nowrap">{doc.dateReceived.toLocaleDateString()}</td>
@@ -578,7 +579,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                       Edit
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               );
             })}
           </tbody>
