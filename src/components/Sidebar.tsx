@@ -14,6 +14,7 @@ import {
   ClockIcon,
   TargetIcon,
   FolderIcon,
+  FileIcon,
   ScaleIcon,
   PhoneIcon,
   ChevronLeftIcon,
@@ -39,6 +40,9 @@ export function Sidebar({
   tracksInternalMemos,
   tracksDtr,
   tracksDipcr,
+  tracksIpcrRatingGuide,
+  tracksLegalAssistance,
+  tracksRegulationLicensing,
   tracksSena,
   tracksCallLog,
 }: {
@@ -55,6 +59,12 @@ export function Sidebar({
   tracksDtr: boolean;
   /** Whether this office keeps a D/IPCR performance commitment at all. */
   tracksDipcr: boolean;
+  /** Whether this office keeps a written IPCR rating scale at all. */
+  tracksIpcrRatingGuide: boolean;
+  /** Whether this office's lawyers keep the Legal Assistance register. */
+  tracksLegalAssistance: boolean;
+  /** Whether this office runs the regulation and licensing desk. */
+  tracksRegulationLicensing: boolean;
   /** Whether this office runs SENA conciliation and keeps its conference register. */
   tracksSena: boolean;
   /** Whether this office keeps the telephone call log. */
@@ -66,9 +76,11 @@ export function Sidebar({
   const currentOrigin = useSearchParams().get("origin") ?? "";
   const [collapsed, setCollapsed] = useState(false);
 
-  // Same truncation the outgoing routing prefix uses (src/lib/documentTypeCodes.ts):
-  // the seeded office is coded "MWPTD-CARAGA" but signs itself "MWPTD", and the
-  // units onboarded later ("FAD", "WRSD") have no suffix to strip.
+  // Same truncation the outgoing routing prefix uses
+  // (src/lib/documentTypeCodes.ts). No office carries a suffix today — MWPTD
+  // was renamed from "MWPTD-CARAGA" on 2026-09-08 — so this is a no-op for
+  // every current code, kept because a regional suffix is exactly the shape a
+  // later unit might arrive with.
   const shortCode = officeCode.split("-")[0];
 
   const items: NavItem[] = [
@@ -119,6 +131,23 @@ export function Sidebar({
     // others feed, so it reads after them rather than among them.
     ...(tracksDipcr
       ? [{ href: "/dipcr", label: "D/IPCR", icon: <TargetIcon className="h-[18px] w-[18px]" /> }]
+      : []),
+    // Sits directly under the D/IPCR because it is read against it: the
+    // scale on this page is what a figure on that one gets scored by. Its
+    // own flag, though — see officeTracksIpcrRatingGuide.
+    ...(tracksIpcrRatingGuide
+      ? [{ href: "/ipcr-rating-guide", label: "IPCR Rating Guide", icon: <FileIcon className="h-[18px] w-[18px]" /> }]
+      : []),
+    // Sits with the other client-facing registers rather than the internal
+    // paperwork above: this one records people walked through the door, the
+    // way SENA and the call log do.
+    ...(tracksLegalAssistance
+      ? [{ href: "/legal-assistance", label: "Legal assistance", icon: <UsersIcon className="h-[18px] w-[18px]" /> }]
+      : []),
+    // Beside legal assistance: the other desk the public walks up to, and the
+    // office keeps the two registers side by side in the same workbook.
+    ...(tracksRegulationLicensing
+      ? [{ href: "/regulation-licensing", label: "Regulation and Licensing", icon: <ClipboardListIcon className="h-[18px] w-[18px]" /> }]
       : []),
     // Last of the registers, as it is in the office's own tabs, and before
     // Forms: the call log records enquiries that mostly end in the call itself

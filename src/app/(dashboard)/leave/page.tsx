@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import Link from "next/link";
 import { Prisma, LeaveType } from "@prisma/client";
+import { scannedCopyFileName } from "@/lib/scannedCopy";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Pagination } from "@/components/Pagination";
@@ -36,7 +37,9 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
   const [leaves, total, users, office] = await Promise.all([
     prisma.leave.findMany({
       where,
-      orderBy: { leaveStart: "desc" },
+      // Tie-broken by entry order — see the incoming register: several people
+      // commonly start leave on the same day, which sorts them equal.
+      orderBy: [{ leaveStart: "desc" }, { createdAt: "desc" }],
       include: { personnel: { select: { name: true } } },
       skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
       take: isPrint ? PRINT_MAX : PAGE_SIZE,
@@ -143,8 +146,17 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                         "—"
                       )
                     ) : leave.scannedCopyUrl ? (
-                      <a href={`/api/files/${leave.scannedCopyUrl}`} target="_blank" rel="noreferrer" className="text-info hover:underline">
-                        View
+                      <a
+                        href={`/api/files/${leave.scannedCopyUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={scannedCopyFileName(leave.scannedCopyUrl)}
+                        // The name can be long and this is one column among many, so it is
+                        // clipped to the column rather than allowed to widen the table; the
+                        // title above gives the whole thing on hover.
+                        className="block max-w-[14rem] truncate text-info hover:underline"
+                      >
+                        {scannedCopyFileName(leave.scannedCopyUrl)}
                       </a>
                     ) : (
                       "—"

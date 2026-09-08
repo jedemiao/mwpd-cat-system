@@ -12,6 +12,10 @@ const SECTION_LABEL: Record<string, string> = {
   activities: "Monthly activity",
   leave: "Leave",
   internal: "Internal",
+  dipcr: "D/IPCR",
+  "ipcr-rating-guide": "IPCR Rating Guide",
+  "legal-assistance": "Legal assistance",
+  "regulation-licensing": "Regulation and Licensing",
   forms: "Forms",
   settings: "Settings",
 };
@@ -32,6 +36,12 @@ type NotificationSummary = {
   dueSoon: number;
   routedToMe: number;
   routedDocs: { id: string; routingNumber: string; documentTitle: string }[];
+  forChecking: number;
+  forCheckingDocs: { id: string; routingNumber: string; documentTitle: string }[];
+  returnedToMe: number;
+  returnedDocs: { id: string; routingNumber: string; documentTitle: string }[];
+  deliveries: number;
+  deliveryDocs: { id: string; routingNumber: string; documentTitle: string }[];
 };
 
 export function Topbar({

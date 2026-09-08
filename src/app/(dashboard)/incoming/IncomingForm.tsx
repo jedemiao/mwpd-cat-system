@@ -32,6 +32,9 @@ type IncomingFormProps = {
    *  its twelve columns in their order, every one present from the start, and
    *  no DC sign-off step. See the schema comment for what it leaves out. */
   registerLayout: boolean;
+  /** Whether this office is under ARTA. Only MWPTD is; for everyone else the
+      complexity/lead-time field describes a duty they do not have. */
+  tracksArta: boolean;
   initialData?: {
     dateReceived?: string;
     timeReceived?: string;
@@ -47,11 +50,9 @@ type IncomingFormProps = {
     routedToIds?: string[];
     instructions?: string;
     complexity?: Complexity;
-    numCorrections?: number;
     progressRemarks?: string;
     notes?: string;
     dateCompleted?: string;
-    dcSignOffDate?: string;
     scannedCopyUrl?: string;
     filed?: boolean;
   };
@@ -87,6 +88,7 @@ export function IncomingForm({
   canSignOff,
   splitIncomingLedgers,
   registerLayout,
+  tracksArta,
   initialData,
 }: IncomingFormProps) {
   const router = useRouter();
@@ -118,11 +120,9 @@ export function IncomingForm({
   // separate columns, so the due date is a field here and not merely a
   // consequence. It is filled from the lead time and stays editable.
   const [dueDate, setDueDate] = useState(initialData?.dueDate ?? "");
-  const [numCorrections, setNumCorrections] = useState(initialData?.numCorrections ?? 0);
   const [progressRemarks, setProgressRemarks] = useState(initialData?.progressRemarks ?? "");
   const [notes, setNotes] = useState(initialData?.notes ?? "");
   const [dateCompleted, setDateCompleted] = useState(initialData?.dateCompleted ?? "");
-  const [dcSignOffDate, setDcSignOffDate] = useState(initialData?.dcSignOffDate ?? "");
   const [scannedCopyUrl, setScannedCopyUrl] = useState(initialData?.scannedCopyUrl ?? "");
   const [filed, setFiled] = useState(initialData?.filed ?? false);
   const [error, setError] = useState<string | null>(null);
@@ -164,22 +164,13 @@ export function IncomingForm({
           signatory: signatory || undefined,
         };
 
-    // The register fills its whole row from the start — the completion columns
-    // are on the create form, blank until they apply — so they are sent on
-    // create too, which the fuller layout only does on edit.
-    const registerProgress = registerLayout
-      ? {
-          progressRemarks: progressRemarks || undefined,
-          scannedCopyUrl: scannedCopyUrl || undefined,
-          filed,
-          ...(canSignOff
-            ? {
-                numCorrections,
-                dateCompleted: dateCompleted || undefined,
-              }
-            : {}),
-        }
-      : {};
+    // The register used to fill its whole row at creation. It no longer does:
+    // creating a record is now purely the act of receiving a document, for
+    // every office and every layout. What happens to it afterwards is worked
+    // and recorded on the outgoing side, and closed out on the edit screen.
+    //
+    // The scanned copy is the exception, and belongs with intake rather than
+    // after it: the desk scans what it accepts, at the moment it accepts it.
 
     // Only sent alongside "Others"; switching away from it clears the text
     // rather than leaving a stale specification attached to a named type.
@@ -193,18 +184,14 @@ export function IncomingForm({
             documentTypeOther: typeOtherDetail || undefined,
             documentTitle,
             ...intake,
-            ...(registerLayout ? {} : { notes: notes || undefined }),
-            ...registerProgress,
-            ...(canSignOff
-              ? {
-                  routedToIds,
-                  instructions: instructions || undefined,
-                  complexity,
-                  // Sent only where it is a field somebody can see and set;
-                  // elsewhere the server computes it from the lead time.
-                  ...(registerLayout && dueDate ? { dueDate } : {}),
-                }
-              : {}),
+            scannedCopyUrl: scannedCopyUrl || undefined,
+            // Routing, instructions and complexity are deliberately absent.
+            // Receiving a document and deciding who works it are two acts by
+            // two people, and the second one happens on the edit screen. A
+            // document created here lands on the Division Chief unrouted —
+            // the API does that itself for anyone who cannot route (see
+            // src/app/api/incoming/route.ts), so the Chief's list is the
+            // queue of things waiting to be assigned.
           }
         : {
             dateReceived,
@@ -225,12 +212,10 @@ export function IncomingForm({
                   routedToIds,
                   instructions: instructions || null,
                   complexity,
-                  numCorrections,
                   dateCompleted: dateCompleted || null,
-                  // No sign-off column in the register, so the field is never
-                  // rendered and never sent — sending null would clear a date
-                  // an office had set before adopting this layout.
-                  ...(registerLayout ? { dueDate: dueDate || null } : { dcSignOffDate: dcSignOffDate || null }),
+                  // Only sent where it is a field somebody can see; elsewhere
+                  // the server recomputes it from the lead time.
+                  ...(registerLayout ? { dueDate: dueDate || null } : {}),
                 }
               : {}),
             progressRemarks: progressRemarks || null,
@@ -469,6 +454,25 @@ export function IncomingForm({
         />
       </div>
 
+      {/* Part of intake, not of what happens afterwards: the desk scans the
+          document as it accepts it. */}
+      <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />
+
+      {mode === "create" && (
+        <p className="rounded-md border border-ink-400/20 bg-surface px-3 py-2 text-sm text-ink-500 dark:border-white/10 dark:bg-ink-900 dark:text-white/40">
+          On save this goes to the Division Chief, who assigns the staff who will
+          work on it. Their reply is drafted and tracked under Outgoing.
+        </p>
+      )}
+
+      {/* Everything below is the Division Chief’s act of routing, and it only
+          makes sense once there is a document to route. Receiving and assigning
+          are two decisions by two people; putting them on one screen invited
+          whoever was at the desk to guess at the second one. */}
+      {mode === "edit" && (
+      <>
+      <hr className="border-ink-400/15 dark:border-white/10" />
+
       <div>
         <span className={labelClass}>{registerLayout ? "Routed to / responsible person" : "Routed to"}</span>
         {canSignOff ? (
@@ -487,11 +491,9 @@ export function IncomingForm({
           </div>
         ) : (
           <p className={readOnlyClass}>
-            {mode === "create"
-              ? "Will be routed to the Division Chief automatically on creation"
-              : routedToIds.length > 0
-                ? routedToIds.map((id) => users.find((u) => u.id === id)?.name ?? id).join(", ")
-                : "— Unassigned —"}
+            {routedToIds.length > 0
+              ? routedToIds.map((id) => users.find((u) => u.id === id)?.name ?? id).join(", ")
+              : "— Unassigned —"}
           </p>
         )}
       </div>
@@ -544,6 +546,10 @@ export function IncomingForm({
           </div>
         )}
 
+        {/* ARTA is MWPTD's statutory duty, not every division's. Where the
+            office is not under it, a complexity field would ask a clerk to
+            classify a document against a clock that does not run for them. */}
+        {tracksArta && (
         <div>
           <label className={labelClass} htmlFor="complexity">
             {registerLayout ? "Lead time (ARTA)" : "Complexity (ARTA)"}
@@ -567,114 +573,85 @@ export function IncomingForm({
             <p className={readOnlyClass}>{COMPLEXITY_LABEL[complexity]}</p>
           )}
         </div>
+        )}
       </div>
 
-      {/* The register is one row filled in over time, so its remaining columns
-          are present from the start, blank until they apply. The fuller layout
-          keeps them for the edit screen, where they first become answerable. */}
-      {(mode === "edit" || registerLayout) && (
-        <>
-          <hr className="border-ink-400/15 dark:border-white/10" />
+      {/* The records side of the ledger: the clerk’s own columns, filled in as
+          the physical document is dealt with. Distinct from the work log on the
+          reply, which is where the staff member assigned to it records what
+          they are actually doing — that lives under Outgoing.
 
-          {/* Ordered as the register's remaining columns run: corrections,
-              progress, date completed, scanned copy, filed. */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass} htmlFor="numCorrections">
-                No. of corrections
-              </label>
-              {canSignOff ? (
-                <input
-                  id="numCorrections"
-                  type="number"
-                  min={0}
-                  value={numCorrections}
-                  onChange={(e) => setNumCorrections(Number(e.target.value))}
-                  className={inputClass}
-                />
-              ) : (
-                <p className={readOnlyClass}>{numCorrections}</p>
-              )}
-            </div>
-            <div>
-              <label className={labelClass} htmlFor="progressRemarks">
-                Progress / remarks
-              </label>
+          Two columns that used to sit here are gone. "No. of corrections" is
+          now "No. of versions" — how many drafts the reply took, counted from
+          the version history rather than typed; and the DC sign-off date
+          recorded an approval that now happens per version, on the reply
+          itself. */}
+      <hr className="border-ink-400/15 dark:border-white/10" />
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass} htmlFor="progressRemarks">
+            Progress / remarks
+          </label>
+          <input
+            id="progressRemarks"
+            type="text"
+            value={progressRemarks}
+            onChange={(e) => setProgressRemarks(e.target.value)}
+            placeholder="Forwarded to…"
+            className={inputClass}
+          />
+        </div>
+
+        {/* Not on the register. Where Progress says where the document is
+            ("forwarded to Maam Marissa"), Notes says what has been done to it
+            ("scanned and filed"). */}
+        {!registerLayout && (
+          <div>
+            <label className={labelClass} htmlFor="notes">
+              Notes
+            </label>
+            <input
+              id="notes"
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Scanned and filed"
+              className={inputClass}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass} htmlFor="dateCompleted">
+            Date task completed
+          </label>
+          {canSignOff ? (
+            <>
               <input
-                id="progressRemarks"
-                type="text"
-                value={progressRemarks}
-                onChange={(e) => setProgressRemarks(e.target.value)}
-                placeholder="Forwarded to…"
+                id="dateCompleted"
+                type="date"
+                value={dateCompleted}
+                onChange={(e) => setDateCompleted(e.target.value)}
                 className={inputClass}
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass} htmlFor="dateCompleted">
-                Date task completed
-              </label>
-              {canSignOff ? (
-                <input
-                  id="dateCompleted"
-                  type="date"
-                  value={dateCompleted}
-                  onChange={(e) => setDateCompleted(e.target.value)}
-                  className={inputClass}
-                />
-              ) : (
-                <p className={readOnlyClass}>{dateCompleted || "Not yet completed"}</p>
-              )}
-            </div>
-            <FileUploadField label="Scanned copy" value={scannedCopyUrl} onChange={setScannedCopyUrl} />
-          </div>
-
-          {/* Neither column is on the register. Notes is the source tracker's
-              second remarks column — where Progress says where the document is
-              ("forwarded to Maam Marissa"), Notes says what has been done to it
-              ("scanned and filed"). Sign-off is an app step their sheet has no
-              equivalent for; see Office.incomingRegisterForm. */}
-          {!registerLayout && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass} htmlFor="notes">
-                  Notes
-                </label>
-                <input
-                  id="notes"
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Scanned and filed"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="dcSignOffDate">
-                  DC sign-off date
-                </label>
-                {canSignOff ? (
-                  <input
-                    id="dcSignOffDate"
-                    type="date"
-                    value={dcSignOffDate}
-                    onChange={(e) => setDcSignOffDate(e.target.value)}
-                    className={inputClass}
-                  />
-                ) : (
-                  <p className={readOnlyClass}>{dcSignOffDate || "Not yet signed off"} — only the Division Chief can set this</p>
-                )}
-              </div>
-            </div>
+              <p className="mt-1 text-xs text-ink-500 dark:text-white/40">
+                Set automatically when the reply to this document is released. Fill it
+                in by hand only to close out a document that was dealt with off-system.
+              </p>
+            </>
+          ) : (
+            <p className={readOnlyClass}>{dateCompleted || "Not yet completed"}</p>
           )}
-
-          <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-white/70">
-            <input type="checkbox" className="field-checkbox" checked={filed} onChange={(e) => setFiled(e.target.checked)} />
-            Filed
-          </label>
-        </>
+        </div>
+        <label className="flex items-end gap-2 pb-2 text-sm text-ink-700 dark:text-white/70">
+          <input type="checkbox" className="field-checkbox" checked={filed} onChange={(e) => setFiled(e.target.checked)} />
+          Filed
+        </label>
+      </div>
+      </>
       )}
 
       {error && <p className="text-sm text-danger-600">{error}</p>}

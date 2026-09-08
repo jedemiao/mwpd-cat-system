@@ -11,7 +11,9 @@ import {
 import { z } from "zod";
 
 const createSchema = z.object({
-  dateReleased: z.string(), // ISO date string from the client
+  // Optional now: a dispatch is created while it is still being written, and it
+  // has no release date until it is released.
+  dateReleased: z.string().optional(),
   // Offices that keep their own register type the tracking number by hand
   // (e.g. "PSD-2026-08-389"). When absent, one is generated as usual. Both
   // land in the same unique column, so a typed duplicate is refused below
@@ -27,7 +29,10 @@ const createSchema = z.object({
   activityIds: z.array(z.string()).optional(),
   // Receipt acknowledgement — recorded when the recipient takes delivery, which
   // is usually after the record is first created, so all four are optional.
-  receivingOffice: z.string().optional(),
+  // Required: a dispatch is addressed to somewhere, and this is the field the
+  // delivery to another division is raised from. Enforced here as well as in
+  // the form, because the form is convenience and this is the boundary.
+  receivingOffice: z.string().trim().min(1, "Choose at least one office for this document."),
   receivedBy: z.string().optional(),
   receivedDate: z.string().optional(),
   receivedTime: z.string().optional(),
@@ -41,9 +46,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Two lists, not one, because a released dispatch and a draft answer
+  // different questions. "released" is the register — what left the building.
+  // "work" is the board — what is still being written, checked or revised, in
+  // the order it was received rather than released, since none of it has a
+  // release date to sort by.
+  const view = req.nextUrl.searchParams.get("view") === "work" ? "work" : "released";
+
   const docs = await prisma.outgoingDocument.findMany({
-    where: { officeId: session.user.officeId },
-    orderBy: { dateReleased: "desc" },
+    where: {
+      officeId: session.user.officeId,
+      status: view === "work" ? { not: "RELEASED" } : "RELEASED",
+    },
+    orderBy: view === "work" ? { createdAt: "asc" } : { dateReleased: "desc" },
     include: { relatedIncoming: { select: { routingNumber: true, documentTitle: true } } },
   });
 
@@ -82,7 +97,7 @@ export async function POST(req: NextRequest) {
     activityIds: rawActivityIds,
     ...rest
   } = parsed.data;
-  const releasedDate = new Date(dateReleased);
+  const releasedDate = dateReleased ? new Date(dateReleased) : null;
 
   // Office-scoped, exactly as the incoming route does: an activity id from
   // another division must not become linkable by guessing it.
@@ -102,31 +117,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Specify the document type when choosing Others." }, { status: 400 });
   }
 
-  // Atomically claim the next sequence number and create the record
-  // together, so two simultaneous dispatches can't collide on a number.
+  // No sequence number is claimed here any more. An originated dispatch starts
+  // as a draft like everything else, and a draft that is still being revised
+  // must not hold a number out of the register: the format is date-led, so a
+  // number claimed on Monday and released on Friday reads as a gap in the
+  // register's date order. The counter is claimed at release instead.
   //
-  // A hand-typed number skips the counter entirely: incrementing it for a
-  // record that doesn't use it would burn generated numbers and leave gaps in
-  // the offices that do.
+  // A hand-typed number (the offices that keep their own register) is kept as
+  // given — it never came from the counter, so nothing is being deferred.
   let doc;
   try {
-    doc = await prisma.$transaction(async (tx) => {
-    let number = routingNumber;
-    if (!number) {
-      const office = await tx.office.update({
-        where: { id: session.user.officeId },
-        data: { outgoingSeqCounter: { increment: 1 } },
-        select: { outgoingSeqCounter: true, code: true },
-      });
-      const officePrefix = office.code.split("-")[0];
-      number = buildOutgoingRoutingNumber(releasedDate, officePrefix, documentType, office.outgoingSeqCounter);
-    }
-
-    return tx.outgoingDocument.create({
+    doc = await prisma.outgoingDocument.create({
       data: {
         ...rest,
         officeId: session.user.officeId,
-        routingNumber: number,
+        routingNumber: routingNumber ?? null,
+        status: "DRAFT",
         // Stored as well as embedded in the routing number, so the ledger can be
         // filtered by type without parsing the number back apart — the incoming
         // side already does this.
@@ -140,7 +146,6 @@ export async function POST(req: NextRequest) {
           ? { linkedActivities: { create: activityIds.map((activityId) => ({ activityId })) } }
           : {}),
       },
-    });
     });
   } catch (e) {
     // Tracking numbers are unique across the whole table. A hand-typed one can

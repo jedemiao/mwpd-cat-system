@@ -13,7 +13,10 @@ const updateSchema = z.object({
   instructions: z.string().nullable().optional(),
   // Receipt acknowledgement is normally filled in here rather than at creation:
   // the document is logged when it leaves, and comes back signed for later.
-  receivingOffice: z.string().nullable().optional(),
+  // Optional so a PATCH that touches other fields need not resend it, but not
+  // nullable: an edit may change which offices a document is addressed to and
+  // must not be able to leave it addressed to none.
+  receivingOffice: z.string().trim().min(1, "Choose at least one office for this document.").optional(),
   receivedBy: z.string().nullable().optional(),
   receivedDate: z.string().nullable().optional(),
   receivedTime: z.string().nullable().optional(),

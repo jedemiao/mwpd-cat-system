@@ -35,7 +35,7 @@ export async function getIncomingFormData(officeId: string) {
     // already awaiting this function.
     prisma.office.findUnique({
       where: { id: officeId },
-      select: { splitIncomingLedgers: true, incomingRegisterForm: true },
+      select: { splitIncomingLedgers: true, incomingRegisterForm: true, tracksArta: true },
     }),
   ]);
 
@@ -45,5 +45,6 @@ export async function getIncomingFormData(officeId: string) {
     signatorySuggestions: signatoryRows.map((r) => r.signatory!).filter(Boolean),
     splitIncomingLedgers: office?.splitIncomingLedgers ?? false,
     registerLayout: office?.incomingRegisterForm ?? false,
+    tracksArta: office?.tracksArta ?? false,
   };
 }

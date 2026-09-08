@@ -8,6 +8,14 @@ import {
   DOCUMENT_TYPE_OTHER_CODE,
   type DocumentTypeCode,
 } from "@/lib/documentTypeCodes";
+import {
+  RECEIVING_OFFICES,
+  RECEIVING_OFFICE_LABELS,
+  receivingOfficeLabel,
+  formatReceivingOffices,
+  parseReceivingOffices,
+  type ReceivingOffice,
+} from "@/lib/receivingOffices";
 
 
 type OutgoingFormProps = {
@@ -20,6 +28,12 @@ type OutgoingFormProps = {
    * Instruction field — their form has none.
    */
   registerStyle?: boolean;
+  /**
+   * Which of the office codes above name a division that keeps its records in
+   * this app. Ticking any other office records where the document went, but
+   * cannot deliver it — there is no ledger here to deliver it into.
+   */
+  deliverableOffices?: string[];
   /** Recent activities offered by the register-style activity picker. */
   activities?: ActivityOption[];
   initialData?: {
@@ -51,6 +65,7 @@ export function OutgoingForm({
   id,
   initialData,
   registerStyle = false,
+  deliverableOffices = [],
   activities = [],
 }: OutgoingFormProps) {
   const router = useRouter();
@@ -60,7 +75,15 @@ export function OutgoingForm({
   const [documentTypeOther, setDocumentTypeOther] = useState(initialData?.documentTypeOther ?? "");
   const [documentTitle, setDocumentTitle] = useState(initialData?.documentTitle ?? "");
   const [instructions, setInstructions] = useState(initialData?.instructions ?? "");
-  const [receivingOffice, setReceivingOffice] = useState(initialData?.receivingOffice ?? "");
+  // Split once on mount: the ticked offices are editable, anything the field
+  // held before it became a checklist rides along untouched.
+  const initialOffices = parseReceivingOffices(initialData?.receivingOffice);
+  const [receivingOffices, setReceivingOffices] = useState<ReceivingOffice[]>(initialOffices.selected);
+  // Ticked offices this app cannot deliver to — ARD and ADJU today. Named as
+  // they are ticked rather than listed up front, so the note only appears when
+  // it actually applies to this document.
+  const undeliverable = receivingOffices.filter((o) => !deliverableOffices.includes(o));
+  const [receivingOfficeExtras] = useState<string[]>(initialOffices.extras);
   const [receivedBy, setReceivedBy] = useState(initialData?.receivedBy ?? "");
   const [receivedDate, setReceivedDate] = useState(initialData?.receivedDate ?? "");
   const [receivedTime, setReceivedTime] = useState(initialData?.receivedTime ?? "");
@@ -71,6 +94,10 @@ export function OutgoingForm({
   const [activityQuery, setActivityQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function toggleReceivingOffice(office: ReceivingOffice) {
+    setReceivingOffices((prev) => (prev.includes(office) ? prev.filter((o) => o !== office) : [...prev, office]));
+  }
 
   function toggleActivity(activityId: string) {
     setActivityIds((prev) => (prev.includes(activityId) ? prev.filter((a) => a !== activityId) : [...prev, activityId]));
@@ -86,12 +113,20 @@ export function OutgoingForm({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Every dispatch goes somewhere, and the office is what a delivery is
+    // raised from — released with none addressed, it reaches nobody. Extras
+    // count: a record entered before this was a list already names its office,
+    // just not from the checkboxes.
+    if (receivingOffices.length === 0 && receivingOfficeExtras.length === 0) {
+      setError("Choose at least one office for this document.");
+      return;
+    }
     setLoading(true);
 
     const body =
       mode === "create"
         ? {
-            dateReleased,
             // Only sent when the office types its own; otherwise the API
             // generates one. Never send an empty string — that would fail
             // validation rather than falling back to generation.
@@ -102,7 +137,7 @@ export function OutgoingForm({
             documentTitle,
             instructions: instructions || undefined,
             ...(registerStyle ? { progressRemarks: progressRemarks || undefined, activityIds } : {}),
-            receivingOffice: receivingOffice || undefined,
+            receivingOffice: formatReceivingOffices(receivingOffices, receivingOfficeExtras) || undefined,
             receivedBy: receivedBy || undefined,
             receivedDate: receivedDate || undefined,
             receivedTime: receivedTime || undefined,
@@ -112,7 +147,7 @@ export function OutgoingForm({
             routingNumber,
             documentTitle,
             instructions: instructions || null,
-            receivingOffice: receivingOffice || null,
+            receivingOffice: formatReceivingOffices(receivingOffices, receivingOfficeExtras) || null,
             receivedBy: receivedBy || null,
             receivedDate: receivedDate || null,
             receivedTime: receivedTime || null,
@@ -194,19 +229,28 @@ export function OutgoingForm({
   return (
     <form onSubmit={handleSubmit} className="card max-w-2xl space-y-4 p-6">
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass} htmlFor="dateReleased">
-            Date released
-          </label>
-          <input
-            id="dateReleased"
-            type="date"
-            required
-            value={dateReleased}
-            onChange={(e) => setDateReleased(e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        {/* A new dispatch is a draft: it has not been released, so there is no
+            release date to state. The date is recorded when it is released,
+            which is also when a generated tracking number is claimed. */}
+        {mode === "create" ? (
+          <div>
+            <span className={labelClass}>Date released</span>
+            <p className={readOnlyClass}>Recorded when this is released</p>
+          </div>
+        ) : (
+          <div>
+            <label className={labelClass} htmlFor="dateReleased">
+              Date released
+            </label>
+            <input
+              id="dateReleased"
+              type="date"
+              value={dateReleased}
+              onChange={(e) => setDateReleased(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        )}
         {/* Nothing sits beside the date on create where the number is
             generated: the sequence is only claimed on save, so the cell is left
             out rather than filled with a box that never completes. The note
@@ -307,19 +351,51 @@ export function OutgoingForm({
           signs, and the clerk records who took it, for which office, and when.
           A released document with no receipt is exactly what gets chased. */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass} htmlFor="receivingOffice">
-            Office
-          </label>
-          <input
-            id="receivingOffice"
-            type="text"
-            value={receivingOffice}
-            onChange={(e) => setReceivingOffice(e.target.value)}
-            placeholder="PROTECTION, FAD, ORD…"
-            className={inputClass}
-          />
-        </div>
+        {/* A fixed checklist rather than the free-text box this used to be: the
+            same destination was arriving spelled several ways, and a document
+            genuinely can go to more than one office at once. Spans the full
+            row, and wraps rather than squeezing once the list outgrows it. */}
+        <fieldset className="sm:col-span-2">
+          <legend className={labelClass}>
+            Office{" "}
+            <span className="normal-case text-ink-400 dark:text-white/30">(required, can select more than one)</span>
+          </legend>
+          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
+            {RECEIVING_OFFICES.map((office) => (
+              <label
+                key={office}
+                className="flex items-center gap-2 text-sm text-ink-700 dark:text-white/70"
+              >
+                <input
+                  type="checkbox"
+                  className="field-checkbox"
+                  checked={receivingOffices.includes(office)}
+                  onChange={() => toggleReceivingOffice(office)}
+                />
+                {RECEIVING_OFFICE_LABELS[office]}
+              </label>
+            ))}
+          </div>
+          {/* The commonest confusion this form causes: ticking an office looks
+              like sending, but the delivery is raised on Release. Said here
+              rather than left to be discovered. */}
+          <p className="mt-2 text-xs text-ink-500 dark:text-white/40">
+            Delivered to these divisions when the document is released — ticking an office
+            does not send it yet.
+          </p>
+          {undeliverable.length > 0 && (
+            <p className="mt-1 text-xs text-warning-700 dark:text-warning">
+              {undeliverable.map(receivingOfficeLabel).join(", ")} {undeliverable.length === 1 ? "keeps" : "keep"} no records here,
+              so {undeliverable.length === 1 ? "it is" : "they are"} recorded on this document only.
+            </p>
+          )}
+          {/* Only ever appears on a record entered before this was a list. */}
+          {receivingOfficeExtras.length > 0 && (
+            <p className="mt-2 text-xs text-ink-500 dark:text-white/40">
+              Also recorded: {receivingOfficeExtras.join(", ")}
+            </p>
+          )}
+        </fieldset>
 
         <div>
           <label className={labelClass} htmlFor="receivedBy">

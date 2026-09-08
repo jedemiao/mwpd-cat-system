@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
+import { scannedCopyFileName } from "@/lib/scannedCopy";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { officeTracksInternalMemos } from "@/lib/internalMemos";
@@ -55,7 +56,9 @@ export default async function InternalPage(props: { searchParams: Promise<Search
   const [memos, total, office] = await Promise.all([
     prisma.internalMemo.findMany({
       where,
-      orderBy: { dateReleased: "desc" },
+      // Tie-broken by entry order — see the incoming register: a bare date sorts
+      // a whole day's memos equal, leaving skip/take pagination unstable.
+      orderBy: [{ dateReleased: "desc" }, { createdAt: "desc" }],
       skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
       take: isPrint ? PRINT_MAX : PAGE_SIZE,
     }),
@@ -156,8 +159,17 @@ export default async function InternalPage(props: { searchParams: Promise<Search
                       "—"
                     )
                   ) : memo.scannedCopyUrl ? (
-                    <a href={`/api/files/${memo.scannedCopyUrl}`} target="_blank" rel="noreferrer" className="text-info hover:underline">
-                      View
+                    <a
+                      href={`/api/files/${memo.scannedCopyUrl}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={scannedCopyFileName(memo.scannedCopyUrl)}
+                      // The name can be long and this is one column among many, so it is
+                      // clipped to the column rather than allowed to widen the table; the
+                      // title above gives the whole thing on hover.
+                      className="block max-w-[14rem] truncate text-info hover:underline"
+                    >
+                      {scannedCopyFileName(memo.scannedCopyUrl)}
                     </a>
                   ) : (
                     "—"

@@ -15,6 +15,8 @@ npm run build && npm run start           # production build / run
 npx prisma migrate dev --name <name>     # apply a schema change (edit prisma/schema.prisma first)
 npm run prisma:studio                    # browse the database
 npm run prisma:seed                      # seed one office + the staff roster (prisma/seed.ts)
+npm run seed-temp                        # fill a DEV database with throwaway records in every register
+npm run seed-temp -- --undo              # remove exactly what that seeded (prisma/.temp-seed-manifest.json)
 docker compose up -d db minio            # start just the local dev dependencies (Postgres + MinIO)
 docker compose up -d --build             # full stack: db, minio, app, nginx (documented deploy path)
 ```
@@ -32,10 +34,41 @@ BACKUP_PASSPHRASE=... ./scripts/update.sh    # or BACKUP_PASSPHRASE_FILE=...
 SKIP_BACKUP=1 ./scripts/update.sh            # only if you just ran a backup
 ```
 
+### Backups
+
+Backups run **inside the stack**, as the `backup` service — a container that
+sleeps until `BACKUP_AT` (default 12:00, container timezone) and writes an
+encrypted dump of Postgres and the MinIO volume to `./backups`.
+
+```bash
+docker compose logs backup            # when it last ran, when it runs next
+docker compose run --rm --entrypoint /usr/local/bin/run-backup.sh backup   # one now
+```
+
+This replaced a Windows Task Scheduler job (now disabled, not deleted) that ran
+`scripts/backup.sh`. That job failed two ways: it was killed part-way through
+every run — exit `0xC000013A`, with a literal `^C` in its output, because the
+Docker CLI receives a spurious console control event in a scheduled session —
+and it only ran at all while somebody was signed in to Windows. The container
+shells out to docker for nothing: it reaches Postgres over `db-net` and mounts
+the MinIO volume read-only.
+
+`scripts/backup.sh` still works and is still what `update.sh` calls; it is the
+way to take a backup by hand. Both it and the container now **delete** an
+undersized artifact and fail loudly, because the original bug left 15-byte
+`.gpg` files sitting in `./backups` looking like real backups for days.
+
+The passphrase is mounted from `secrets/backup-passphrase` (gitignored) rather
+than passed as an environment variable, so it stays out of `docker inspect`.
+Backups still land on the same disk as the data — offsite copies and retention
+(`BACKUP_KEEP_DAYS`, off by default) are still open questions.
+
 Three things make an update safe here, and they're easy to get wrong by hand — which is why they live in the script:
 - **Data survives rebuilds.** Postgres and MinIO data are in named volumes (`db_data`, `minio_data`); `up -d --build`, `restart`, and plain `down` never touch them. The **one** command that wipes them is `docker compose down -v` — never run it against the deployment. The script never does.
 - **Migrations do NOT run on container startup** (the app just runs `node server.js`). A schema change that ships without `prisma migrate deploy` crashes the app with "column ... does not exist". `update.sh` always runs `migrate deploy` (a no-op when nothing's pending), so you never have to decide whether the schema changed.
 - **Prod migrations use `.env` → port 5433 → the db container**, not `.env.local` → port 5432 (that's the local `npm run dev` database). `prisma migrate deploy` on the host targets the right one via `.env`; `update.sh` relies on this. A bare `prisma migrate dev` also loads `.env`, so it hits prod too — use `migrate deploy` for the deployment, and remember local-dev schema changes must be applied to *both* databases.
+
+  This bites scripts as well, and less visibly: **importing `@prisma/client` auto-loads `.env` into `process.env` at module load**, before any of your code runs. So a `ts-node` script that reads `process.env.DATABASE_URL` targets the *deployment* even when it never asked for it, and even when it read `.env.local` itself. Any script that means to hit the dev database has to take the URL from the file it loaded (and pass it via `new PrismaClient({ datasources: { db: { url } } })`) rather than trusting the ambient variable — see `scripts/seed-temp-documents.ts`.
 
 ## Architecture
 

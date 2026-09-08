@@ -26,9 +26,16 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
+    # Host ports remapped for the same reason Postgres uses 5433 (see the db
+    # service and CLAUDE.md): a native MinIO install already owns 9000/9001 on
+    # some dev machines, and binding them here fails the whole `up` with
+    # "ports are not available". Nothing in the stack depends on these — the app
+    # reaches MinIO at minio:9000 and nginx proxies /mwpd-scans/ to the same
+    # name, both over storage-net. They exist only for host-side access and the
+    # web console.
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001" # MinIO web console
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001" # MinIO web console
     read_only: true
     tmpfs:
       - /tmp
@@ -84,7 +91,13 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /app/.next/cache
+      # uid/gid must match the nextjs user the image runs as (Dockerfile: 1001).
+      # A tmpfs mounts root-owned 0755 by default and shadows whatever the image
+      # has at that path, so without this the unprivileged process cannot create
+      # .next/cache/images and every optimised image raised an unhandled EACCES
+      # — which no amount of chown-ing in the Dockerfile could fix, because the
+      # mount replaces the directory at container start.
+      - /app/.next/cache:uid=1001,gid=1001
     networks:
       - db-net
       - storage-net
@@ -123,6 +136,47 @@ services:
       - /var/run
     networks:
       - storage-net
+
+  # The nightly encrypted backup, scheduled by the stack itself.
+  #
+  # This replaced a Windows Task Scheduler job that ran scripts/backup.sh. That
+  # job was killed part-way through every run (exit 0xC000013A, with a literal
+  # "^C" in its captured output) because the Docker CLI is delivered a spurious
+  # console control event in a scheduled session — and it only ran at all while
+  # somebody was signed in to Windows, which on an office server is the larger
+  # problem of the two.
+  #
+  # Nothing here shells out to docker: Postgres is reached over db-net, and the
+  # documents are a mounted volume. See docker/backup/run-backup.sh.
+  backup:
+    build: ./docker/backup
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Read from the file mounted below rather than from the environment, so
+      # the passphrase is not exposed to anyone who can run `docker inspect`.
+      BACKUP_PASSPHRASE_FILE: /run/secrets/backup-passphrase
+      # 24-hour HH:MM in the container's timezone. Kept at the hour the Windows
+      # task used: this machine is not on overnight, so an 02:00 schedule would
+      # simply never fire.
+      BACKUP_AT: ${BACKUP_AT:-12:00}
+      # Unset means keep everything. Set a number of days to start pruning —
+      # deliberately opt-in, so nothing deletes an office record by default.
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-}
+      TZ: ${TZ:-Asia/Manila}
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./backups:/backups
+      # Read-only: the backup service must never be able to alter the documents
+      # it exists to protect.
+      - minio_data:/minio:ro
+      - ./secrets/backup-passphrase:/run/secrets/backup-passphrase:ro
+    networks:
+      - db-net
 
 networks:
   # These are NOT `internal: true`. That was the first attempt at this, but

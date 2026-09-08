@@ -29,9 +29,19 @@ enum DocComplexity {
 // Where a document came from. The source tracker splits these into two
 // separate pages and two near-identical ledgers; here it is one field on one
 // ledger, so the distinction is filterable without duplicating the module.
+// Where a document came from, read from the receiving division's side.
+//
+// The offices split their Incoming ledger on this, and they mean "did we write
+// this ourselves, or did it come to us from somewhere else" — so a document
+// forwarded by another DMW division is EXTERNAL to the division receiving it,
+// and lands in Incoming > External alongside agency and walk-in correspondence.
+// This contradicts an earlier reading of the enum (that INTERNAL covered other
+// divisions); confirmed with the office 2026-09-08, and
+// /api/deliveries/[id]/receive files hand-overs as EXTERNAL accordingly.
 enum DocumentOrigin {
-  INTERNAL // from within DMW — other divisions, regional/central office
-  EXTERNAL // from outside — agencies, employers, walk-in clients, email
+  INTERNAL // this division's own paperwork
+  EXTERNAL // anything that reached us from elsewhere — other DMW divisions,
+  //          agencies, employers, walk-in clients, email
 }
 
 // The office's own vocabulary for what a day on the calendar is, taken from
@@ -70,10 +80,34 @@ enum LeaveType {
   OTHER
 }
 
+// Where a reply (or an originated dispatch) has got to on its way out of the
+// office. Every routed incoming document is worked into a reply, and that reply
+// is checked by the Division Chief before it leaves — so a dispatch record now
+// exists for most of its life *before* anything is released.
+//
+// The register at /outgoing?view=released shows RELEASED rows only. Everything
+// earlier is work in progress and belongs on the work board, not in a register
+// whose every row is meant to be a document that really left the building.
+enum OutgoingStatus {
+  DRAFT // being written; not yet submitted to the Chief
+  FOR_CHECKING // submitted, sitting with the Chief
+  RETURNED // the Chief sent it back for revision
+  APPROVED // the Chief is satisfied; not yet physically released
+  RELEASED // out the door, tracking number assigned
+}
+
+// How the Division Chief answered one submission. Stored per version rather
+// than per document: a reply that went back twice has two RETURNED rounds and
+// one APPROVED one, and the point of versioning is that all three stay readable.
+enum OutgoingReviewOutcome {
+  RETURNED
+  APPROVED
+}
+
 model Office {
   id        String   @id @default(cuid())
   name      String
-  code      String   @unique // short code, e.g. "MWPTD-CARAGA"
+  code      String   @unique // short code, e.g. "MWPTD"
   createdAt DateTime @default(now())
 
   // Whether this office is subject to ARTA (Anti-Red Tape Act) due dates.
@@ -86,6 +120,19 @@ model Office {
   // it has no duty to act on is worse than wrongly showing none, and the
   // second mistake is the one anybody would notice.
   tracksArta Boolean @default(false)
+
+  // Whether a dispatch needs the Division Chief's approval before it can be
+  // released. MWPTD works that way — draft, submit, Chief approves, release —
+  // and the review flow exists for them. The other divisions release directly:
+  // their staff put the document out themselves, and a gate none of them asked
+  // for would just stop work.
+  //
+  // Defaults to TRUE, unlike the tracksX flags, and deliberately: those decide
+  // whether an office SEES something, where over-showing is the cheap mistake.
+  // This decides whether a document can leave the office unreviewed, where the
+  // cheap mistake is the other way round. A division onboarded later gets the
+  // gate until somebody consciously removes it.
+  requiresChiefApproval Boolean @default(true)
 
   // Whether the incoming and outgoing ledgers render this office's full
   // register layout, copied column-for-column from MWPSD's own tracker.
@@ -209,16 +256,39 @@ model Office {
   // plausibly keep a call log without running conciliation.
   tracksCallLog Boolean @default(false)
 
-  users           User[]
-  incoming        IncomingDocument[]
-  outgoing        OutgoingDocument[]
-  activities      Activity[]
-  leaves          Leave[]
-  internalMemos   InternalMemo[]
-  dtrRecords      DtrRecord[]
-  dipcrIndicators DipcrIndicator[]
-  senaConferences SenaConference[]
-  callLogs        CallLog[]
+  // Whether this office keeps an IPCR Rating Guide — the sheet that fixes,
+  // ahead of the period, what a 5 down to a 1 means for each success
+  // indicator. Its own flag rather than riding on tracksDipcr, for the reason
+  // tracksCallLog is separate from tracksSena: MWPTD happens to have both
+  // today, but a division can perfectly well keep a D/IPCR without agreeing a
+  // written rating scale for it, and one flag would make that unsayable.
+  tracksIpcrRatingGuide Boolean @default(false)
+
+  // Whether this office keeps the Legal Assistance register. MWPTD does: its
+  // lawyers log every client assisted. A division with no legal officers has
+  // the module omitted rather than shown leading to an empty ledger.
+  tracksLegalAssistance Boolean @default(false)
+
+  // Whether this office runs the regulation and licensing desk — deployment
+  // certificates, LRA verifications and the rest. MWPTD does; a division that
+  // does not has the module omitted rather than shown leading to an empty
+  // ledger.
+  tracksRegulationLicensing Boolean @default(false)
+
+  users               User[]
+  incoming            IncomingDocument[]
+  outgoing            OutgoingDocument[]
+  activities          Activity[]
+  leaves              Leave[]
+  internalMemos       InternalMemo[]
+  dtrRecords          DtrRecord[]
+  dipcrIndicators     DipcrIndicator[]
+  senaConferences     SenaConference[]
+  callLogs            CallLog[]
+  ipcrRatingRows      IpcrRatingGuideRow[]
+  legalAssistance     LegalAssistance[]
+  regulationLicensing RegulationLicensing[]
+  deliveriesReceived  DocumentDelivery[]    @relation("DeliveryRecipient")
 }
 
 model User {
@@ -239,15 +309,22 @@ model User {
   avatarUrl    String? // MinIO object key for the profile photo
   createdAt    DateTime @default(now())
 
-  routedIncoming     IncomingRoutedStaff[]
-  receivedIncoming   IncomingDocument[]    @relation("IncomingReceivedBy")
-  activityAssignment ActivityAssignee[]
-  leaves             Leave[]
-  dtrRecords         DtrRecord[]
-  dipcrAccountable   DipcrAccountable[]
-  auditLogs          AuditLog[]
-  formTemplates      FormTemplate[]
-  senaMediations     SenaConference[]      @relation("SenaMediator")
+  routedIncoming      IncomingRoutedStaff[]
+  receivedIncoming    IncomingDocument[]           @relation("IncomingReceivedBy")
+  activityAssignment  ActivityAssignee[]
+  leaves              Leave[]
+  dtrRecords          DtrRecord[]
+  dipcrAccountable    DipcrAccountable[]
+  ipcrAccountable     IpcrRatingGuideAccountable[]
+  legalAssistance     LegalAssistance[]            @relation("LegalAssistanceOfficer")
+  regulationLicensing RegulationLicensing[]        @relation("RegulationLicensingPersonnel")
+  auditLogs           AuditLog[]
+  formTemplates       FormTemplate[]
+  senaMediations      SenaConference[]             @relation("SenaMediator")
+  outgoingSubmitted   OutgoingVersion[]            @relation("OutgoingVersionSubmitter")
+  outgoingReviewed    OutgoingVersion[]            @relation("OutgoingVersionReviewer")
+  outgoingNotes       OutgoingNote[]               @relation("OutgoingNoteAuthor")
+  deliveriesReceived  DocumentDelivery[]           @relation("DeliveryReceivedBy")
 }
 
 // One row of the D/IPCR (Division / Individual Performance Commitment and
@@ -407,7 +484,6 @@ model IncomingDocument {
   complexity        DocComplexity         @default(SIMPLE)
   leadTimeDays      Int                   @default(3) // derived from complexity, editable
   dueDate           DateTime? // dateReceived + leadTimeDays, computed on save
-  numCorrections    Int                   @default(0)
   progressRemarks   String? // what is happening with it (routing state)
   notes             String? // filing state, kept separate from progressRemarks
   dateCompleted     DateTime?
@@ -415,7 +491,12 @@ model IncomingDocument {
   scannedCopyUrl    String? // MinIO object key
   filed             Boolean               @default(false)
 
-  outgoingReplies  OutgoingDocument[] // documents dispatched in response
+  // The replies dispatched in response. How many drafts a reply took is not
+  // stored here — it is the number of OutgoingVersion rows hanging off the
+  // reply, shown in the ledger as "No. of versions". A stored count beside a
+  // version history is a copy that can only ever drift out of step with it.
+  outgoingReplies  OutgoingDocument[]
+  delivery         DocumentDelivery?
   linkedActivities IncomingDocumentActivity[] // the activities this document concerns
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
@@ -453,8 +534,33 @@ model OutgoingDocument {
   officeId String
   office   Office @relation(fields: [officeId], references: [id])
 
-  dateReleased      DateTime
-  routingNumber     String   @unique // e.g. 070226-MWPTD-DC-004
+  // Null until the document physically leaves. A reply spends its whole draft
+  // and review life on the work board, where there is no release date to state
+  // — writing one early would put a date in the register for something that
+  // had not happened.
+  dateReleased      DateTime?
+  // Two ways a dispatch gets its number, and the difference is visible in the
+  // string:
+  //
+  //  - A REPLY inherits the routing number of the incoming document it answers,
+  //    unchanged (081126-M-014). That is the "one-time routing number": one
+  //    number per transaction, carried from the receiving desk to the release,
+  //    so staff searching it find both halves and never have to hold two
+  //    numbers for one piece of work. It costs nothing — routingNumber is
+  //    unique per table, so the same string in both tables is legal — and it
+  //    burns no sequence number, because the incoming side already spent one.
+  //    A second reply to the same incoming is suffixed -R2, -R3 (see
+  //    buildReplyRoutingNumber in src/lib/documentTypeCodes.ts).
+  //  - An ORIGINATED dispatch — a transmittal or report the division starts
+  //    itself, answering nothing — has nothing to inherit, so it draws from
+  //    outgoingSeqCounter as before (081126-MWPTD-L-004).
+  //
+  // Null while an originated dispatch is still a draft: the counter is claimed
+  // at release, so a draft that is still being revised does not hold a number
+  // out of the register and leave a gap in the date order the format is built
+  // from. Postgres allows many NULLs under a unique index, so the constraint
+  // still means what it meant.
+  routingNumber     String?   @unique // e.g. 070226-MWPTD-DC-004
   // Type code from src/lib/documentTypeCodes.ts, stored so the ledger can be
   // filtered by type — the incoming side already does this.
   documentType      String?
@@ -473,17 +579,96 @@ model OutgoingDocument {
   receivedDate    DateTime? // date the recipient acknowledged it
   receivedTime    String? // "10:54 PM" — clock time, same shape as IncomingDocument.timeReceived
 
+  // The summary line the printed register carries. The running account of what
+  // is happening lives in versions and notes below; this stays as the one-line
+  // column the sheet has always had.
   progressRemarks String?
   scannedCopyUrl  String?
   filed           Boolean @default(false)
+
+  // DRAFT for anything created on the work board; RELEASED is backfilled onto
+  // every row that predates the review loop, since each of those was already a
+  // released dispatch by definition — the register had no other kind of row.
+  status   OutgoingStatus    @default(DRAFT)
+  versions OutgoingVersion[]
+  notes    OutgoingNote[]
 
   relatedIncomingId String?
   relatedIncoming   IncomingDocument? @relation(fields: [relatedIncomingId], references: [id])
 
   linkedActivities OutgoingDocumentActivity[] // the activities this dispatch concerns
 
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  // The divisions this dispatch was addressed to that keep records here.
+  deliveries DocumentDelivery[]
+}
+
+// One round trip of the reply between the staff member writing it and the
+// Division Chief checking it: the draft that was sent up, and what came back.
+//
+// Both halves are on one row on purpose. A submission and its verdict are the
+// same event seen from two desks, and splitting them would make "how many times
+// did this come back?" a join instead of a count. reviewedAt is null exactly
+// while the version is still sitting with the Chief, which is what makes
+// "what is waiting on me" a query rather than a scan of the status column.
+//
+// Append-only, like AuditLog: a superseded version is history, not a draft to
+// be tidied away. That is the whole point of versioning it — the office wants
+// to see that a reply went back twice, not just that it eventually went out.
+model OutgoingVersion {
+  id         String           @id @default(cuid())
+  outgoingId String
+  outgoing   OutgoingDocument @relation(fields: [outgoingId], references: [id], onDelete: Cascade)
+
+  // 1, 2, 3… within one reply. Allocated in the same transaction as the row so
+  // two submissions cannot claim the same number; see the unique index below,
+  // which is what actually enforces it.
+  versionNumber Int
+  // The draft itself — a MinIO object key from POST /api/upload, never a value
+  // built anywhere else (see src/lib/minio.ts). Required: a submission with
+  // nothing attached is a progress note, and that is what OutgoingNote is for.
+  fileUrl       String
+  fileName      String
+  // What changed this round, in the submitter's words.
+  staffNote     String?
+  submittedById String
+  submittedBy   User     @relation("OutgoingVersionSubmitter", fields: [submittedById], references: [id])
+  submittedAt   DateTime @default(now())
+
+  // Null until the Chief answers. canSignOffAsChief gates writing these three,
+  // the same check that gates the incoming side's sign-off.
+  outcome      OutgoingReviewOutcome?
+  chiefRemarks String?
+  reviewedById String?
+  reviewedBy   User?                  @relation("OutgoingVersionReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  // Two rows cannot be version 3 of the same reply.
+  @@unique([outgoingId, versionNumber])
+  // The timeline reads one reply's rounds in order.
+  @@index([outgoingId, versionNumber])
+}
+
+// A progress note with no draft attached — "waiting on the employer's reply",
+// "endorsed to Legal". Deliberately not an OutgoingVersion: nothing was
+// submitted and nothing is waiting on the Chief, so numbering it would inflate
+// the round count that the version history exists to report honestly.
+//
+// Kept because the pipeline board's job is finding stalled documents, and a
+// staff member held up by an outside party has to be able to say so without
+// inventing a draft to attach.
+model OutgoingNote {
+  id         String           @id @default(cuid())
+  outgoingId String
+  outgoing   OutgoingDocument @relation(fields: [outgoingId], references: [id], onDelete: Cascade)
+
+  body      String
+  authorId  String
+  author    User     @relation("OutgoingNoteAuthor", fields: [authorId], references: [id])
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@index([outgoingId, createdAt])
 }
 
 model Activity {
@@ -714,4 +899,289 @@ model CallLog {
   updatedAt DateTime @updatedAt
 
   @@index([officeId, callDate])
+}
+
+// The three things every success indicator is scored on. Not every indicator
+// uses all three — the sheet gives some rows Quality and Efficiency only, and a
+// missing dimension means "not rated on this", not "rated zero". That is why
+// descriptors are rows rather than columns: an unused dimension simply has no
+// row, and nothing has to encode the difference between blank and absent.
+enum IpcrRatingDimension {
+  QUALITY
+  EFFICIENCY
+  TIMELINESS
+}
+
+// One line of the IPCR Rating Guide: an indicator, and what each score from 5
+// down to 1 will be taken to mean for it. Agreed at the start of the period,
+// which is the whole point of the sheet — the scale is settled before there is
+// anything to score, so a rating later is a reading rather than an argument.
+//
+// Deliberately its own table rather than columns hung off DipcrIndicator, even
+// though columns A–C say the same things. The two sheets are kept and revised
+// as separate documents here, and sharing rows would have meant one could not
+// be edited without touching the other.
+model IpcrRatingGuideRow {
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
+
+  // Scoped like the D/IPCR: a rating guide belongs to one office's one
+  // semester, and reuses that module's semester enum rather than declaring a
+  // second identical one.
+  year     Int
+  semester DipcrSemester
+
+  // Column A's two levels, kept as text on the row for the same reason the
+  // D/IPCR does it: the page groups by them to rebuild the sheet's merged
+  // cells, and a PAP is renamed rarely enough not to earn a table.
+  section             String // "CORE FUNCTIONS"
+  pap                 String // "MOU/MOA partnerships forged with LGUs..."
+  // Column B — the target and its measure, as written on the sheet.
+  successIndicator    String
+  // Column D. Nullable because the sheet leaves it blank on some rows.
+  meansOfVerification String?
+  // Preserves the sheet's order within a PAP, which is meaningful — the
+  // indicators read as a sequence, not a set.
+  sortOrder           Int     @default(0)
+
+  accountable IpcrRatingGuideAccountable[]
+  ratings     IpcrRatingDescriptor[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Every view of this module is one office's one semester.
+  @@index([officeId, year, semester])
+}
+
+// Column C — who is answerable. A real link to the roster rather than the
+// sheet's typed names ("Apple, Cherryl"), so the same person is the same person
+// everywhere. Same shape as DipcrAccountable and IncomingRoutedStaff.
+model IpcrRatingGuideAccountable {
+  rowId  String
+  row    IpcrRatingGuideRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  userId String
+  user   User               @relation(fields: [userId], references: [id])
+
+  @@id([rowId, userId])
+}
+
+// One dimension's five descriptors for one indicator — the right-hand block of
+// the sheet, where a row reads across from Outstanding to Poor.
+model IpcrRatingDescriptor {
+  id        String              @id @default(cuid())
+  rowId     String
+  row       IpcrRatingGuideRow  @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  dimension IpcrRatingDimension
+
+  // Numbered for the score they describe, not named, because that is how the
+  // sheet's headings read and how anybody rating against it will speak: "that
+  // is a 4". All nullable — the sheet leaves cells blank where a level needs no
+  // separate wording (see "Not developed" spanning 2 and 1 on some rows).
+  level5 String? // Outstanding
+  level4 String? // Very Satisfactory
+  level3 String? // Satisfactory
+  level2 String? // Unsatisfactory
+  level1 String? // Poor
+
+  // A dimension appears at most once per indicator; the sheet has no room for
+  // two Quality rows on one indicator and neither does this.
+  @@unique([rowId, dimension])
+}
+
+// Column D. Two tick-boxes on the sheet, one field here: every row has exactly
+// one of them marked, and two booleans would allow "both" and "neither", which
+// the register has no way to mean.
+enum ClientSex {
+  MALE
+  FEMALE
+}
+
+// Columns E–L — what was actually given. Kept as the sheet's own abbreviations
+// rather than expanded guesses: these are the office's terms, they are what the
+// column headings say, and inventing long forms for them would put words in the
+// register nobody there uses.
+//
+// A list, not a single choice: rows routinely carry several ticks (RV with
+// money claims and DAE, for instance), so one column cannot hold the answer.
+enum LegalAssistanceForm {
+  RV
+  MONEY_CLAIMS
+  DAW
+  DAE
+  IR
+  TIP
+  NON_SUPPORT
+  OTHERS
+}
+
+// One client seen, on one date, by one legal officer — the office's Legal
+// Assistance register, a row per person assisted rather than per case.
+model LegalAssistance {
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
+
+  // The sheet's month header plus a day number, stored as a real date for the
+  // same reason SenaConference does it: a month view is then a range query, and
+  // December to January needs no special handling.
+  assistanceDate DateTime
+
+  // Column B is a dropdown of the office's lawyers, so it is the staff record
+  // itself rather than the typed name — "what did Atty. Liem handle in August"
+  // becomes a query. Same treatment as SenaConference.mediator.
+  legalOfficerId String
+  legalOfficer   User   @relation("LegalAssistanceOfficer", fields: [legalOfficerId], references: [id])
+
+  // Column C. Free text: the client is a walk-in member of the public, not a
+  // record this app holds.
+  clientName String
+  sex        ClientSex
+
+  // Columns E–L, as a set. Empty is legal — a row can be logged before anyone
+  // has decided what form the assistance took.
+  forms LegalAssistanceForm[]
+
+  // What "Others" was, in the officer's own words. Only meaningful when
+  // OTHERS is among the forms above, and the API clears it when that tick is
+  // removed — a detail left behind by an untick would describe assistance the
+  // row no longer says was given.
+  //
+  // Optional even when OTHERS is ticked: the sheet's column is a bare
+  // tick-box, so a row that only ticks it is still a row the register can
+  // hold, and refusing to save it would be this app inventing a rule the
+  // office does not have.
+  othersDetail String?
+
+  // Column M — the scanned completed LAD. A MinIO object key from
+  // POST /api/upload, never a value built anywhere else (see src/lib/minio.ts).
+  scannedCopyUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The register is read one office at a time, newest first.
+  @@index([officeId, assistanceDate])
+}
+
+// Columns E–J — the services the desk actually rendered. A list, not a single
+// choice: one caller is commonly given more than one, and the sheet ticks each
+// separately.
+//
+// Named for what the column headings say. "ACCREDATION" on the sheet is a
+// misspelling of accreditation and is spelled correctly here — unlike RV or DAE
+// on the legal assistance register, this is a word with one spelling rather
+// than an office abbreviation to be preserved.
+enum RegulationLicensingService {
+  DEPLOYMENT_CERTIFICATE
+  LRA_DIRECTORY
+  LRA_VERIFICATION
+  LRA_PERSONNEL_ACCREDITATION
+  SRA_ASSISTANCE
+  SUBMISSION_OF_REPORTS
+  OTHERS
+}
+
+// One requesting party served, on one date, by one member of staff — the
+// office's Regulation and Licensing register.
+model RegulationLicensing {
+  id       String @id @default(cuid())
+  officeId String
+  office   Office @relation(fields: [officeId], references: [id])
+
+  // Stored as a real date for the same reason the other registers do it: a
+  // month view is then a range query, and December to January needs no special
+  // handling.
+  serviceDate DateTime
+
+  // Column B is the staff member who attended to it, so it is the roster record
+  // rather than the typed name — the same treatment as LegalAssistance's legal
+  // officer.
+  personnelId String
+  personnel   User   @relation("RegulationLicensingPersonnel", fields: [personnelId], references: [id])
+
+  // Column C. Free text: the requesting party is a member of the public or an
+  // agency, neither of which is a record this app holds.
+  requestingParty String
+  // Column D. Reuses the legal assistance register's enum rather than declaring
+  // a second identical one — it is the same fact about a person either way.
+  sex             ClientSex
+
+  // Columns E–J, as a set. Empty is legal: a row can be logged before anyone
+  // has settled what was given.
+  services RegulationLicensingService[]
+
+  // What "Others" was, in the officer's own words. Only meaningful while
+  // OTHERS is among the services above, and the API clears it when that tick
+  // is removed — a detail left behind by an untick would describe a service
+  // the row no longer says was rendered. Same rule as the legal assistance
+  // register's othersDetail.
+  othersDetail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The register is read one office at a time, newest first.
+  @@index([officeId, serviceDate])
+}
+
+enum DeliveryStatus {
+  PENDING // released and addressed here, not yet taken in
+  RECEIVED // the receiving office has filed it in their own register
+}
+
+// One released dispatch, addressed to one division that keeps its records in
+// this app. The link between two offices' ledgers, and the only thing in the
+// schema that crosses the officeId boundary on purpose.
+//
+// Why a row rather than creating the recipient's IncomingDocument outright:
+// dateReceived, timeReceived and receivedBy are facts about the recipient's own
+// desk, and a document appearing in their register already stamped "received"
+// would be this app inventing a receipt nobody made. So the release raises a
+// PENDING delivery; the recipient files it, and only then does an incoming
+// record exist — with their number, their date and their name on it.
+//
+// It also closes the loop the other way. OutgoingDocument.receivedBy /
+// receivedDate / receivedTime exist so the sender can answer "did this actually
+// reach them?", and until now the only way to fill them was to ring up and ask.
+// The recipient filing a delivery answers it directly.
+//
+// Only the tick codes that name a tenant division produce one of these: ARD and
+// ADJU take documents but keep no records here, so a dispatch to them stays
+// what it has always been — a line in the sender's own register.
+model DocumentDelivery {
+  id String @id @default(cuid())
+
+  // Cascade: a dispatch deleted from the sender's register takes its
+  // undelivered addressing with it. Anything already RECEIVED has produced an
+  // IncomingDocument that belongs to the recipient, and that survives — see
+  // receivedIncomingId, which is deliberately not a cascade.
+  outgoingId String
+  outgoing   OutgoingDocument @relation(fields: [outgoingId], references: [id], onDelete: Cascade)
+
+  // The division it is addressed to. The division it came FROM needs no column:
+  // it is outgoing.officeId, and duplicating it here would be a second copy of
+  // the same fact that could disagree with the first.
+  toOfficeId String
+  toOffice   Office @relation("DeliveryRecipient", fields: [toOfficeId], references: [id])
+
+  status DeliveryStatus @default(PENDING)
+
+  // What the recipient made of it. Unique because one delivery becomes at most
+  // one register entry — filing it twice would put the same dispatch in their
+  // ledger under two numbers.
+  receivedIncomingId String?           @unique
+  receivedIncoming   IncomingDocument? @relation(fields: [receivedIncomingId], references: [id])
+  receivedById       String?
+  receivedBy         User?             @relation("DeliveryReceivedBy", fields: [receivedById], references: [id])
+  receivedAt         DateTime?
+
+  createdAt DateTime @default(now())
+
+  // A dispatch is addressed to an office once. Re-releasing must not raise a
+  // second delivery for a division that already has it.
+  @@unique([outgoingId, toOfficeId])
+  // The recipient's tray: their pending deliveries, newest first.
+  @@index([toOfficeId, status])
 }

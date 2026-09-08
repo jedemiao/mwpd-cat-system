@@ -18,14 +18,12 @@ import { z } from "zod";
 // routing number, title) is left open to whoever is creating the record.
 // Matches the PATCH route's list: routine record-keeping (progress remarks,
 // scanned copy, filed) stays open to whoever holds the record, while the DC
-// column does not. numCorrections and dateCompleted joined this list when the
-// register layout began sending them on create as well as on edit.
+// column does not.
 const CHIEF_ONLY_FIELDS = [
   "routedToIds",
   "instructions",
   "complexity",
   "dueDate",
-  "numCorrections",
   "dateCompleted",
 ] as const;
 
@@ -56,7 +54,6 @@ const createSchema = z.object({
   // legitimately arrive on the very first save — a document logged after the
   // fact is entered complete. The fuller layout never sends these on create,
   // which is why they are all optional rather than defaulted.
-  numCorrections: z.number().int().min(0).optional(),
   progressRemarks: z.string().optional(),
   dateCompleted: z.string().optional(),
   scannedCopyUrl: z.string().optional(),

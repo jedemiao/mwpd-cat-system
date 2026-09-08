@@ -1,9 +1,12 @@
 import { getServerSession } from "next-auth";
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
+import { scannedCopyFileName } from "@/lib/scannedCopy";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getArtaAlertDocuments } from "@/lib/artaAlerts";
+import { DeliveryTray } from "@/components/DeliveryTray";
+import { getPendingDeliveries } from "@/lib/documentDelivery";
 import { Pagination } from "@/components/Pagination";
 import { Badge } from "@/components/Badge";
 import { PrintLink, listHref } from "@/components/PrintLink";
@@ -13,10 +16,9 @@ import { PlusIcon, SearchIcon } from "@/components/icons";
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_OTHER_CODE, documentTypeLabel } from "@/lib/documentTypeCodes";
 import {
   PIPELINE_STAGE_LABELS,
+  PIPELINE_STAGES,
   isPipelineStage,
-  officeTracksSignOff,
   pipelineStageWhere,
-  pipelineStagesFor,
   type PipelineStage,
 } from "@/lib/correspondencePipeline";
 
@@ -69,16 +71,14 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
   // chasing a backlog actually wants, and one shared parameter could not say it.
   //
   // An unrecognised value falls back to no filter rather than an empty ledger,
-  // matching how `status` treats anything outside its three known values —
-  // and "unrecognised" is judged against the stages this office actually has,
-  // not the global list. A hand-typed ?stage=signed-off at an office with no
-  // sign-off step is a name that means nothing here, so it should give the
-  // whole ledger rather than a heading over permanently empty results.
-  const tracksSignOff = await officeTracksSignOff(officeId);
-  const officeStages = pipelineStagesFor(tracksSignOff);
+  // matching how `status` treats anything outside its three known values. Every
+  // office now has the same five stages — the sequence is the same everywhere,
+  // since it is the flow itself rather than a per-office register layout — so a
+  // hand-typed ?stage=signed-off (a stage that no longer exists) simply gives
+  // the whole ledger.
+  const officeStages = PIPELINE_STAGES;
   const stageParam = searchParams.stage ?? "";
-  const stage: PipelineStage | "" =
-    isPipelineStage(stageParam) && officeStages.includes(stageParam) ? stageParam : "";
+  const stage: PipelineStage | "" = isPipelineStage(stageParam) ? stageParam : "";
   const origin = searchParams.origin ?? "";
   const docType = searchParams.type ?? "";
   const agency = searchParams.agency ?? "";
@@ -97,12 +97,8 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
           : {};
 
   // Built by the shared function rather than restated here, so the row count
-  // behind a pipeline link can never disagree with the number that was clicked
-  // — including the sign-off variation, which changes what `unrouted` and
-  // `routed` mean, not just whether a fourth tile appears.
-  const stageWhere: Prisma.IncomingDocumentWhereInput = stage
-    ? pipelineStageWhere(stage, tracksSignOff)
-    : {};
+  // behind a pipeline link can never disagree with the number that was clicked.
+  const stageWhere: Prisma.IncomingDocumentWhereInput = stage ? pipelineStageWhere(stage) : {};
 
   // Status and stage go inside AND rather than being spread alongside the rest.
   // Both can set `dateCompleted`, and the free-text search below sets `OR` —
@@ -130,15 +126,30 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
       : {}),
   };
 
-  const [docs, total, { overdueDocs, dueSoonDocs }, office, agencyRows, signatoryRows, typeRows] = await Promise.all([
+  const [docs, total, { overdueDocs, dueSoonDocs }, office, agencyRows, signatoryRows, typeRows, deliveries] = await Promise.all([
     prisma.incomingDocument.findMany({
       where,
-      orderBy: { dateReceived: "desc" },
+      // createdAt breaks the tie, and it has to be here: dateReceived carries a
+      // date with no time on it, so a whole day's intake sorts exactly equal and
+      // Postgres returns those rows in whatever order suits it. That is worse
+      // than "newest not on top" — it is unstable between requests, and an
+      // unstable sort under skip/take is what makes one row appear on two pages
+      // and another on none. Entry order is the office's own answer to which
+      // document came in last when nothing else separates them.
+      orderBy: [{ dateReceived: "desc" }, { createdAt: "desc" }],
       include: {
         routedTo: { include: { user: { select: { name: true } } } },
         // The ledger names the desk officer who accepted the document, as the
         // office's own internal register does.
         receivedBy: { select: { name: true } },
+        // Where it came from, when it came from another division. Read from
+        // the delivery record rather than the free-text originAgency: that
+        // column also holds agency names typed by hand, so it cannot tell a
+        // DMW division apart from a recruitment firm of the same name. A
+        // delivery row exists only for a real hand-over.
+        delivery: {
+          select: { outgoing: { select: { office: { select: { code: true } } } } },
+        },
       },
       // The print view shows the whole filtered ledger, not one screen of it.
       skip: isPrint ? undefined : (page - 1) * PAGE_SIZE,
@@ -173,6 +184,9 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
       select: { documentType: true },
       orderBy: { documentType: "asc" },
     }),
+    // The hand-over tray. Read here rather than in a child so the page is one
+    // round trip, as the rest of this view already is.
+    getPendingDeliveries(officeId),
   ]);
 
   const agencies = agencyRows.map((r) => r.originAgency!).filter(Boolean);
@@ -256,6 +270,24 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
           truncatedAt={PRINT_MAX}
         />
       )}
+      {/* Not shown on paper: these are not register entries yet, and the
+          printed ledger must only contain what the ledger contains. */}
+      {!isPrint && (
+        <DeliveryTray
+          tracksArta={tracksArta}
+          deliveries={deliveries.map((d) => ({
+            id: d.id,
+            fromOfficeCode: d.outgoing.office.code,
+            fromOfficeName: d.outgoing.office.name,
+            documentTitle: d.outgoing.documentTitle,
+            senderRoutingNumber: d.outgoing.routingNumber,
+            documentType: d.outgoing.documentType,
+            dateReleased: d.outgoing.dateReleased?.toISOString() ?? null,
+            hasScan: Boolean(d.outgoing.scannedCopyUrl),
+          }))}
+        />
+      )}
+
 
       {/* The ARTA banner is a screen alert, not ledger content — the Status
           column already carries "Overdue" onto the paper. */}
@@ -390,6 +422,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                 {tracksArta && <th>Due date</th>}
                 <th>Status</th>
                 <th>Scanned copy</th>
+                <th>Filed</th>
                 <th className="print:hidden"></th>
               </tr>
             ) : (
@@ -410,6 +443,7 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                 {tracksArta && <th>Due date</th>}
                 <th>Status</th>
                 <th>Scanned copy</th>
+                <th>Filed</th>
                 <th className="print:hidden"></th>
               </tr>
             )}
@@ -431,7 +465,14 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                       {tracksOrigin && !origin && <td className="whitespace-nowrap text-xs">{ORIGIN_LABELS[doc.origin]}</td>}
                       <td>{doc.originAgency ?? "—"}</td>
                       <td>{doc.signatory ?? "—"}</td>
-                      <td>{doc.documentTitle}</td>
+                      <td>
+                        {doc.documentTitle}
+                        {doc.delivery && (
+                          <span className="mt-0.5 block text-[11px] font-medium text-info">
+                            From {doc.delivery.outgoing.office.code}
+                          </span>
+                        )}
+                      </td>
                       <td>{doc.progressRemarks ?? "—"}</td>
                       <td>{doc.notes ?? "—"}</td>
                     </>
@@ -452,11 +493,23 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                       )}
                       <td>
                         {doc.documentTitle}
-                        {/* The register has no Office/Agency column either, and
-                            its form never collects one, so this sub-line has
-                            nothing to show there. */}
-                        {doc.originAgency && (
-                          <span className="block text-xs text-ink-400 dark:text-white/30">{doc.originAgency}</span>
+                        {/* A hand-over from another division is named and
+                            coloured; an ordinary sender stays a quiet
+                            sub-line. The two are different facts, and the
+                            agency column alone cannot tell them apart — it
+                            holds typed-in names too. The register layout has
+                            no Office/Agency column and never collects one, so
+                            this whole sub-line is absent there. */}
+                        {doc.delivery ? (
+                          <span className="mt-0.5 block text-[11px] font-medium text-info">
+                            From {doc.delivery.outgoing.office.code}
+                          </span>
+                        ) : (
+                          doc.originAgency && (
+                            <span className="block text-xs text-ink-400 dark:text-white/30">
+                              {doc.originAgency}
+                            </span>
+                          )
                         )}
                       </td>
                     </>
@@ -486,11 +539,38 @@ export default async function IncomingPage(props: { searchParams: Promise<Search
                         "—"
                       )
                     ) : doc.scannedCopyUrl ? (
-                      <a href={`/api/files/${doc.scannedCopyUrl}`} target="_blank" rel="noreferrer" className="text-info hover:underline">
-                        View
+                      <a
+                        href={`/api/files/${doc.scannedCopyUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={scannedCopyFileName(doc.scannedCopyUrl)}
+                        // The name can be long and this is one column among many, so it is
+                        // clipped to the column rather than allowed to widen the table; the
+                        // title above gives the whole thing on hover.
+                        className="block max-w-[14rem] truncate text-info hover:underline"
+                      >
+                        {scannedCopyFileName(doc.scannedCopyUrl)}
                       </a>
                     ) : (
                       "—"
+                    )}
+                  </td>
+                  {/* Scanning and filing are the two halves of the same intake step, so the
+                      columns sit together. The quiet state is the finished one: a register
+                      where every row is filed should read as calm, and only the rows still
+                      waiting on the folder should catch the eye — the same reason RETURNED
+                      is the outgoing board's only warning colour. */}
+                  <td>
+                    {isPrint ? (
+                      doc.filed ? (
+                        "Yes"
+                      ) : (
+                        "—"
+                      )
+                    ) : doc.filed ? (
+                      <span className="text-ink-500 dark:text-white/40">Filed</span>
+                    ) : (
+                      <Badge variant="warning">Not filed</Badge>
                     )}
                   </td>
                   <td className="print:hidden">

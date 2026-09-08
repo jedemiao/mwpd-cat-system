@@ -39,3 +39,10 @@ docker-compose.override.yml
 
 # encrypted local backups (scripts/backup.sh) — never belong in the repo
 /backups/
+
+# manifest of throwaway dev records (scripts/seed-temp-documents.ts) — points at
+# rows in one developer's local database and means nothing in another checkout
+/prisma/.temp-seed-manifest.json
+
+# Backup passphrase mounted into the backup container. Never commit this.
+secrets/

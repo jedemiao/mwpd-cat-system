@@ -36,8 +36,8 @@ function addWorkingDays(start: Date, days: number): Date {
 }
 
 async function main() {
-  const office = await prisma.office.findFirst({ where: { code: "MWPTD-CARAGA" } });
-  if (!office) throw new Error('Office "MWPTD-CARAGA" not found — run `npm run prisma:seed` first.');
+  const office = await prisma.office.findFirst({ where: { code: "MWPTD" } });
+  if (!office) throw new Error('Office "MWPTD" not found — run `npm run prisma:seed` first.');
 
   const officeId = office.id;
   const users = await prisma.user.findMany({ where: { officeId }, orderBy: { name: "asc" } });

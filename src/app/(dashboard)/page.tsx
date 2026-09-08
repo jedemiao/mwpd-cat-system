@@ -77,9 +77,6 @@ export default async function DashboardHomePage() {
       where: { id: officeId },
       select: { tracksArta: true, tracksCorrespondencePipeline: true, incomingRegisterForm: true },
     }),
-    // Which stages exist depends on whether the office has a sign-off step, so
-    // this reads the flag itself rather than taking it from the query above —
-    // the two run in parallel and neither waits on the other.
     getOfficePipeline(officeId),
     // Same overlap test the /activities calendar uses, so a multi-day activity
     // running across a month boundary still appears on this month's grid.
@@ -107,7 +104,10 @@ export default async function DashboardHomePage() {
       include: { personnel: { select: { name: true } } },
     }),
     prisma.incomingDocument.count({ where: { officeId, dateCompleted: null } }),
-    prisma.outgoingDocument.count({ where: { officeId, filed: false } }),
+    // Dispatches awaiting filing. A draft has not been dispatched at all, so
+    // it is not "awaiting" anything a clerk can act on — counting it here would
+    // inflate the tile with other people's unfinished work.
+    prisma.outgoingDocument.count({ where: { officeId, status: "RELEASED", filed: false } }),
     prisma.activity.count({
       where: { officeId, date: { gte: new Date(today.getFullYear(), today.getMonth(), 1) } },
     }),
@@ -120,8 +120,10 @@ export default async function DashboardHomePage() {
       take: 5,
       include: { routedTo: { include: { user: { select: { name: true } } } } },
     }),
+    // Recently dispatched — drafts and documents still in review have no
+    // release date to sort by and have not been dispatched.
     prisma.outgoingDocument.findMany({
-      where: { officeId },
+      where: { officeId, status: "RELEASED" },
       orderBy: { dateReleased: "desc" },
       take: 5,
     }),

@@ -26,6 +26,15 @@ export async function GET(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
+      // Flush a chunk before anything else. A ReadableStream response does
+      // not send its headers until the first chunk is enqueued, so with only
+      // the heartbeat below the browser got no reply for a full 20 seconds:
+      // EventSource stayed in CONNECTING, then errored and reconnected, and
+      // the bell spent its life in that loop instead of listening. This
+      // comment line is ignored by the EventSource parser and exists purely
+      // to open the connection now.
+      controller.enqueue(encoder.encode(": connected\n\n"));
+
       unsubscribe = subscribeToUser(userId, send);
 
       // Keeps the connection alive through browsers/proxies that would

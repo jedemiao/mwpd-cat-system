@@ -1,10 +1,13 @@
 import { Role } from "@prisma/client";
 
 // Gates the whole "DC column" of IncomingDocument — routing, complexity,
-// instructions, corrections count, completion date, and dcSignOffDate
-// itself. ADAS III / records staff own intake (date received, routing
-// number, title, scanned copy, filed); everything the Division Chief
-// reviews and directs is restricted to the Chief, or an Admin standing in.
+// instructions, completion date, and dcSignOffDate itself. ADAS III / records
+// staff own intake (date received, routing number, title, scanned copy, filed);
+// everything the Division Chief reviews and directs is restricted to the Chief,
+// or an Admin standing in.
+//
+// The same check gates reviewing a reply: only the Chief records an
+// OutgoingVersion's outcome and remarks.
 export function canSignOffAsChief(role: Role): boolean {
   return role === "DIVISION_CHIEF" || role === "ADMIN";
 }

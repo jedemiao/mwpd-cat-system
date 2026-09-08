@@ -9,6 +9,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "seed-temp": "ts-node scripts/seed-temp-documents.ts",
     "onboard-division": "ts-node scripts/onboard-division.ts"
   },
   "dependencies": {

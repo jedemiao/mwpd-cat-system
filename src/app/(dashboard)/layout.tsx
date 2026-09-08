@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getArtaAlertCounts } from "@/lib/artaAlerts";
-import { getRoutedToMeSummary } from "@/lib/notifications";
+import { getDeliveryQueue, getOutgoingReviewQueues, getRoutedToMeSummary } from "@/lib/notifications";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { dressDayFor } from "@/lib/dressCode";
@@ -16,9 +16,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // immediately instead of waiting for the session token to be reissued.
   // The office is read from the session's officeId — never from anything the
   // client sends — so each unit's chrome names that unit and nothing else.
-  const [{ overdue, dueSoon }, routed, user, office] = await Promise.all([
+  const [{ overdue, dueSoon }, routed, review, deliveries, user, office] = await Promise.all([
     getArtaAlertCounts(session.user.officeId),
     getRoutedToMeSummary(session.user.officeId, session.user.id),
+    getOutgoingReviewQueues(session.user.officeId, session.user.id, session.user.role),
+    getDeliveryQueue(session.user.officeId),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { avatarUrl: true, isActive: true } }),
     prisma.office.findUnique({
       where: { id: session.user.officeId },
@@ -27,8 +29,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         code: true,
         splitIncomingLedgers: true,
         tracksInternalMemos: true,
-        tracksDtr: true,
-        tracksDipcr: true,
+        tracksDtr: true,        tracksDipcr: true,
+        tracksIpcrRatingGuide: true,
+        tracksLegalAssistance: true,
+        tracksRegulationLicensing: true,
         tracksSena: true,
         tracksCallLog: true,
       },
@@ -64,8 +68,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         officeCode={office?.code ?? "DMW"}
         splitIncomingLedgers={office?.splitIncomingLedgers ?? false}
         tracksInternalMemos={office?.tracksInternalMemos ?? false}
-        tracksDtr={office?.tracksDtr ?? false}
-        tracksDipcr={office?.tracksDipcr ?? false}
+        tracksDtr={office?.tracksDtr ?? false}        tracksDipcr={office?.tracksDipcr ?? false}
+        tracksIpcrRatingGuide={office?.tracksIpcrRatingGuide ?? false}
+        tracksLegalAssistance={office?.tracksLegalAssistance ?? false}
+        tracksRegulationLicensing={office?.tracksRegulationLicensing ?? false}
         tracksSena={office?.tracksSena ?? false}
         tracksCallLog={office?.tracksCallLog ?? false}
       />
@@ -74,7 +80,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
           userName={session.user.name ?? "User"}
           userRole={session.user.role}
           avatarUrl={user?.avatarUrl ?? null}
-          notifications={{ overdue, dueSoon, routedToMe: routed.count, routedDocs: routed.docs }}
+          notifications={{
+            overdue,
+            dueSoon,
+            routedToMe: routed.count,
+            routedDocs: routed.docs,
+            forChecking: review.forChecking.count,
+            forCheckingDocs: review.forChecking.docs,
+            returnedToMe: review.returned.count,
+            returnedDocs: review.returned.docs,
+            deliveries: deliveries.count,
+            deliveryDocs: deliveries.docs,
+          }}
         />
         {children}
       </div>

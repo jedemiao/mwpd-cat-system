@@ -12,7 +12,7 @@ export default async function NewIncomingPage({
   const session = await getServerSession(authOptions);
   const { origin } = await searchParams;
 
-  const { users, agencySuggestions, signatorySuggestions, splitIncomingLedgers, registerLayout } =
+  const { users, agencySuggestions, signatorySuggestions, splitIncomingLedgers, registerLayout, tracksArta } =
     await getIncomingFormData(session!.user.officeId);
 
   // Where the office keeps two registers, source is carried from whichever
@@ -43,6 +43,7 @@ export default async function NewIncomingPage({
         canSignOff={canSignOffAsChief(session!.user.role)}
         splitIncomingLedgers={splitIncomingLedgers}
         registerLayout={registerLayout}
+        tracksArta={tracksArta}
         initialData={{ origin: presetOrigin }}
       />
     </main>

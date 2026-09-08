@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
 import { getArtaAlertCounts } from "@/lib/artaAlerts";
-import { getRoutedToMeSummary } from "@/lib/notifications";
+import { getDeliveryQueue, getOutgoingReviewQueues, getRoutedToMeSummary } from "@/lib/notifications";
 
 // Next's static analysis doesn't see the cookies() read that happens inside
 // getServerSession (it's in the NextAuth library, not this file), so without
@@ -17,9 +17,11 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const [arta, routed] = await Promise.all([
+  const [arta, routed, review, deliveries] = await Promise.all([
     getArtaAlertCounts(session.user.officeId),
     getRoutedToMeSummary(session.user.officeId, session.user.id),
+    getOutgoingReviewQueues(session.user.officeId, session.user.id, session.user.role),
+    getDeliveryQueue(session.user.officeId),
   ]);
 
   return NextResponse.json({
@@ -27,5 +29,11 @@ export async function GET() {
     dueSoon: arta.dueSoon,
     routedToMe: routed.count,
     routedDocs: routed.docs,
+    forChecking: review.forChecking.count,
+    forCheckingDocs: review.forChecking.docs,
+    returnedToMe: review.returned.count,
+    returnedDocs: review.returned.docs,
+    deliveries: deliveries.count,
+    deliveryDocs: deliveries.docs,
   });
 }

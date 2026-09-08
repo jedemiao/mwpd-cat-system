@@ -6,10 +6,10 @@ import {
   type PipelineStage,
 } from "@/lib/correspondencePipeline";
 
-// Rendered as one continuous strip rather than four separate cards, because the
-// stages are a sequence a document travels, not four unrelated metrics. The
-// dividers between cells read as the handovers; a gap between cards would say
-// these are independent numbers, which is exactly the wrong reading.
+// Rendered as one continuous strip rather than separate cards, because the
+// stages are a sequence a document travels, not unrelated metrics. The dividers
+// between cells read as the handovers; a gap between cards would say these are
+// independent numbers, which is exactly the wrong reading.
 //
 // Deliberately colourless. Every count here is a neutral fact about where work
 // sits — a large "With staff" is a healthy office, and tinting the cells amber
@@ -19,8 +19,8 @@ export function PipelineBoard({
   stages,
   counts,
 }: {
-  // Which stages this office actually has — an office with no Division Chief
-  // sign-off step gets three rather than four (see correspondencePipeline.ts).
+  // The five stages, in the order a document travels them. Every office has the
+  // same set: this is the flow itself, not a per-office register layout.
   stages: readonly PipelineStage[];
   counts: PipelineCounts;
 }) {
@@ -47,14 +47,13 @@ export function PipelineBoard({
 
       {total === 0 ? (
         <p className="p-5 text-sm text-ink-500 dark:text-white/40">
-          Nothing in the pipeline — every document is routed, signed off, closed and answered.
+          Nothing in the pipeline — every document received has been answered and released.
         </p>
       ) : (
-        <div
-          className={`grid grid-cols-2 divide-ink-400/10 dark:divide-white/10 sm:divide-x ${
-            stages.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4"
-          }`}
-        >
+        // Five across only where there is room for five; the cells carry a
+        // label and a hint, and squeezing them narrower would turn both into
+        // two-line wraps that are harder to scan than the numbers are useful.
+        <div className="grid grid-cols-2 divide-ink-400/10 dark:divide-white/10 sm:grid-cols-3 sm:divide-x lg:grid-cols-5">
           {stages.map((stage) => {
             const count = counts[stage] ?? 0;
             return (

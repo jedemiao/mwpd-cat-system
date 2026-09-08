@@ -31,7 +31,6 @@ const updateSchema = z.object({
   routedToIds: z.array(z.string()).optional(),
   instructions: z.string().nullable().optional(),
   complexity: z.enum(["SIMPLE", "COMPLEX", "HIGHLY_TECHNICAL"]).optional(),
-  numCorrections: z.number().int().min(0).optional(),
   progressRemarks: z.string().nullable().optional(),
   dateCompleted: z.string().nullable().optional(),
   dcSignOffDate: z.string().nullable().optional(),
@@ -44,7 +43,7 @@ const leadDaysMap = { SIMPLE: 3, COMPLEX: 7, HIGHLY_TECHNICAL: 20 } as const;
 // The DC column — see src/lib/authz.ts. Routine record-keeping (date
 // received, routing number, title, progress remarks, scanned copy, filed)
 // stays open to whoever holds the record.
-const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "numCorrections", "dateCompleted", "dcSignOffDate", "dueDate"] as const;
+const CHIEF_ONLY_FIELDS = ["routedToIds", "instructions", "complexity", "dateCompleted", "dcSignOffDate", "dueDate"] as const;
 
 // PATCH /api/incoming/[id] — update an intake record; due date is
 // recomputed if dateReceived or complexity changes. Only the Division Chief
@@ -213,9 +212,35 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
 
   const existing = await prisma.incomingDocument.findFirst({
     where: { id: params.id, officeId: session.user.officeId },
+    include: { _count: { select: { outgoingReplies: true } } },
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // A document that has been answered cannot be deleted.
+  //
+  // OutgoingDocument.relatedIncomingId is an optional relation, so Postgres
+  // does not refuse this delete — it sets the column to null and the delete
+  // succeeds. The reply then survives with nothing to answer: it shows on the
+  // work board as "Originated here", carries a routing number inherited from a
+  // document that no longer exists, and can never be released, because
+  // releasing closes an incoming record that is gone. Nobody is told any of
+  // this happened.
+  //
+  // Refusing is the right answer rather than cascading. The reply is a real
+  // dispatch record — possibly one already released and signed for — and
+  // erasing it to tidy up the ledger is exactly the kind of thing a records
+  // system must not do quietly. Delete the reply first if that is really the
+  // intention; that is a separate, visible decision.
+  if (existing._count.outgoingReplies > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "This document has a reply and cannot be deleted. Delete the reply from the Outgoing work board first.",
+      },
+      { status: 409 },
+    );
   }
 
   // Both join tables use ON DELETE RESTRICT, so their rows have to go first or

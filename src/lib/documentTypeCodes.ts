@@ -77,8 +77,30 @@ export function buildInternalRoutingNumber(date: Date, type: DocumentTypeCode, s
   return `${type}-${String(seq).padStart(2, "0")}-${date.getUTCFullYear()}`;
 }
 
+// The routing number a reply carries: the one the incoming document was given
+// at the receiving desk, unchanged. One number per transaction, from the moment
+// it arrives to the moment the answer goes out — so a staff member holding a
+// reply and a clerk holding the original are demonstrably talking about the
+// same piece of work, and one search finds both halves.
+//
+// Nothing is generated and no counter moves: the incoming side already spent a
+// sequence number on this transaction, and spending a second one would be the
+// office numbering the same job twice. It is legal because routingNumber is
+// unique *per table* — the same string in IncomingDocument and OutgoingDocument
+// collides with nothing.
+//
+// The suffix exists only for the rare document answered more than once — a
+// follow-up letter after the first reply. The first reply is the bare number, a
+// second is -R2, a third -R3. Present so that case surfaces as a number rather
+// than as a unique-constraint violation.
+export function buildReplyRoutingNumber(incomingRoutingNumber: string, existingReplyCount: number): string {
+  return existingReplyCount === 0
+    ? incomingRoutingNumber
+    : `${incomingRoutingNumber}-R${existingReplyCount + 1}`;
+}
+
 // Outgoing: MMDDYY-<office prefix>-TYPE-### — office prefix is the office's
-// short code up to its first hyphen (e.g. "MWPTD-CARAGA" -> "MWPTD"), so a
+// short code up to its first hyphen (e.g. "WRSD-CARAGA" -> "WRSD"), so a
 // second office onboarded later gets its own prefix automatically.
 export function buildOutgoingRoutingNumber(date: Date, officePrefix: string, type: DocumentTypeCode, seq: number): string {
   return `${formatRoutingDate(date)}-${officePrefix}-${type}-${String(seq).padStart(3, "0")}`;

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Client } from "minio";
 import { requireEnv } from "@/lib/env";
 
@@ -80,4 +81,33 @@ export function getPresignedDownloadUrl(key: string, request?: { host: string; p
       : process.env.MINIO_PUBLIC_URL || `http://${requireEnv("MINIO_ENDPOINT")}:${requireEnv("MINIO_PORT")}`
   );
   return getPublicClient(publicUrl).presignedGetObject(SCANS_BUCKET, key, 60);
+}
+
+/**
+ * Copies a stored object under a different office's key prefix, returning the
+ * new key.
+ *
+ * Needed because file access is decided entirely by that prefix (see
+ * /api/files/[...key]): a scan uploaded by MWPSD lives under MWPSD's id, and
+ * MWPTD reading it back would be refused however legitimately the document
+ * reached them. Handing over a document therefore has to hand over a copy of
+ * its attachment, not a reference to the sender's.
+ *
+ * A copy rather than a widened permission on purpose: the two divisions now
+ * hold two records of the same document, and each keeps its own attachment for
+ * as long as its own retention says to. The sender deleting theirs must not
+ * blank the recipient's register entry.
+ */
+export async function copyObjectToOffice(sourceKey: string, officeId: string): Promise<string> {
+  const client = getMinioClient();
+  await ensureBucket();
+
+  // Same "{officeId}/{uuid}-{filename}" shape the upload route produces, so the
+  // copy is indistinguishable from a file that office uploaded itself.
+  const fileName = sourceKey.split("/").pop() ?? "attachment";
+  const destKey = `${officeId}/${randomUUID()}-${fileName.replace(/^[0-9a-f-]{36}-/i, "")}`;
+
+  // The SDK wants the source as "/bucket/key", not a bare key.
+  await client.copyObject(SCANS_BUCKET, destKey, `/${SCANS_BUCKET}/${sourceKey}`);
+  return destKey;
 }
