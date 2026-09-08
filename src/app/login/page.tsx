@@ -18,12 +18,33 @@ function LoginForm() {
   // browser. Clear it so they land on a clean sign-in rather than bouncing off
   // the dashboard on every click.
   useEffect(() => {
+    // Wrapped: private windows and locked-down browsers throw on access
+    // rather than returning null, and a saved convenience must never be the
+    // reason somebody cannot reach the login form.
+    try {
+      const saved = window.localStorage.getItem("mwpd.username");
+      if (saved) {
+        setUsername(saved);
+        setRememberUsername(true);
+      }
+    } catch {
+      // no stored username available; the field simply starts empty
+    }
+  }, []);
+
+  useEffect(() => {
     if (disabled || stale) void signOut({ redirect: false });
   }, [disabled, stale]);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Stores the username only, despite the label reading "Remember me" — the
+  // wording staff expect. The password is deliberately not kept: on a shared
+  // desk a stored one would let whoever sits down next act as this clerk, and
+  // the audit log would carry their name. The browser's own password manager
+  // is the right place for the secret half — per-profile, and lockable.
+  const [rememberUsername, setRememberUsername] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +61,13 @@ function LoginForm() {
     if (result?.error) {
       setError("Invalid username or password.");
       return;
+    }
+
+    try {
+      if (rememberUsername) window.localStorage.setItem("mwpd.username", username);
+      else window.localStorage.removeItem("mwpd.username");
+    } catch {
+      // storage unavailable; signing in still succeeds
     }
 
     router.push(callbackUrl);
@@ -125,7 +153,16 @@ function LoginForm() {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-[13px] text-ink-600 dark:text-white/60">
+                <input
+                  type="checkbox"
+                  className="field-checkbox"
+                  checked={rememberUsername}
+                  onChange={(e) => setRememberUsername(e.target.checked)}
+                />
+                Remember me
+              </label>
               <button
                 type="button"
                 onClick={() => setShowReset((v) => !v)}
@@ -185,15 +222,20 @@ export default function LoginPage() {
         <div>
           {/* Named for the regional office, not a division: all four divisions
               share this one instance, so nobody has signed in yet at this point
-              and there is no office to personalise the page with. Sized a step
-              down from the old two-word name — this one is 24 characters and
-              would otherwise overflow the panel at the narrow end of lg. */}
-          <h1 className="max-w-[12ch] font-display text-4xl font-extrabold leading-[1.05] text-dayfg xl:text-5xl">
-            DMW Regional Office XIII
+              and there is no office to personalise the page with.
+
+              The region is in the name rather than the strapline below, where it
+              read as a caption on the office rather than part of what the office
+              is called. At 33 characters it wraps to two or three lines by
+              design — max-w is set in ch so the break lands between words at
+              every breakpoint rather than at a pixel width that happens to suit
+              one of them. */}
+          <h1 className="max-w-[15ch] font-display text-5xl font-extrabold leading-[1.05] text-dayfg xl:text-6xl">
+            DMW Regional Office XIII - Caraga
           </h1>
           <div className="my-5 h-0.5 w-16 bg-dayfg/40" />
           <p className="max-w-[34ch] text-dayfg/85">
-            Caraga — communication and activity records tracker.
+            Communication and activity records tracker.
           </p>
         </div>
 
