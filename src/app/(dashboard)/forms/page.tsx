@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PlusIcon, FileIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 
 // Server component: the shared template library, not office-scoped —
 // every office sees and can manage the same list of standard DMW forms.
@@ -33,7 +34,7 @@ export default async function FormsPage() {
           </thead>
           <tbody>
             {templates.map((template) => (
-              <tr key={template.id}>
+              <ClickableRow key={template.id} href={`/forms/${template.id}`}>
                 <td className="whitespace-nowrap font-mono text-xs">{template.number}</td>
                 <td>{template.title}</td>
                 <td>
@@ -53,7 +54,7 @@ export default async function FormsPage() {
                     Edit
                   </Link>
                 </td>
-              </tr>
+              </ClickableRow>
             ))}
           </tbody>
         </table>

@@ -19,6 +19,7 @@ import {
   WORK_BOARD_ORDER,
 } from "@/lib/outgoingStatus";
 import { formatReceivingOfficeLabels } from "@/lib/receivingOffices";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -181,7 +182,7 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
             </thead>
             <tbody>
               {docs.map((doc) => (
-                <tr key={doc.id}>
+                <ClickableRow key={doc.id} href={`/outgoing/${doc.id}`}>
                   <td className="whitespace-nowrap font-mono text-xs">
                     {doc.routingNumber ?? <span className="font-sans text-ink-400 dark:text-white/30">Numbered at release</span>}
                   </td>
@@ -217,7 +218,7 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
                       Open
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               ))}
               {docs.length === 0 && (
                 <tr>
@@ -384,7 +385,7 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
           </thead>
           <tbody>
             {docs.map((doc) => (
-              <tr key={doc.id}>
+              <ClickableRow key={doc.id} href={`/outgoing/${doc.id}`}>
                 {detailedColumns ? (
                   <>
                     <td className="whitespace-nowrap">{doc.dateReleased?.toLocaleDateString() ?? "—"}</td>
@@ -443,7 +444,7 @@ export default async function OutgoingPage(props: { searchParams: Promise<Search
                     Edit
                   </Link>
                 </td>
-              </tr>
+              </ClickableRow>
             ))}
           </tbody>
         </table>

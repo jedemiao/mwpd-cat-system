@@ -8,6 +8,7 @@ import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon } from "@/components/icons";
 import { currentSemester, isSemester, semesterLabel, type DipcrSemesterValue } from "@/lib/dipcr";
+import { ClickableRow } from "@/components/ClickableRow";
 import {
   DIMENSION_LABELS,
   RATING_DIMENSIONS,
@@ -198,7 +199,10 @@ export default async function IpcrRatingGuidePage(props: { searchParams: Promise
                     if (writePapCell) papCellDone = true;
 
                     return (
-                      <tr key={`${row.id}-${rating?.dimension ?? "none"}`}>
+                      <ClickableRow
+                        key={`${row.id}-${rating?.dimension ?? "none"}`}
+                        href={`/ipcr-rating-guide/${row.id}`}
+                      >
                         {writePapCell && (
                           <td rowSpan={papRowCount} className="align-top">
                             {showSection && (
@@ -247,7 +251,7 @@ export default async function IpcrRatingGuidePage(props: { searchParams: Promise
                             </Link>
                           </td>
                         )}
-                      </tr>
+                      </ClickableRow>
                     );
                   }),
                 );

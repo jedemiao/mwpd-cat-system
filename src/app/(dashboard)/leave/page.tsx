@@ -10,6 +10,7 @@ import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon } from "@/components/icons";
 import { LEAVE_TYPE_LABELS, leaveTypeLabel } from "@/lib/leaveTypes";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -133,7 +134,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                 : leave.leaveStart.toLocaleDateString();
 
               return (
-                <tr key={leave.id}>
+                <ClickableRow key={leave.id} href={`/leave/${leave.id}`}>
                   <td className="whitespace-nowrap">{leave.dateFiled?.toLocaleDateString() ?? "—"}</td>
                   <td className="whitespace-nowrap">{schedule}</td>
                   <td>{leaveTypeLabel(leave.type, leave.typeOther)}</td>
@@ -167,7 +168,7 @@ export default async function LeavePage(props: { searchParams: Promise<SearchPar
                       Edit
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               );
             })}
           </tbody>

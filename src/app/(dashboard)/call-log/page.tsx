@@ -10,6 +10,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -123,7 +124,7 @@ export default async function CallLogPage(props: { searchParams: Promise<SearchP
           </thead>
           <tbody>
             {calls.map((c) => (
-              <tr key={c.id}>
+              <ClickableRow key={c.id} href={`/call-log/${c.id}`}>
                 <td className="whitespace-nowrap font-mono text-xs">
                   {c.callDate.toLocaleDateString("en-PH", {
                     day: "2-digit",
@@ -143,7 +144,7 @@ export default async function CallLogPage(props: { searchParams: Promise<SearchP
                     Edit
                   </Link>
                 </td>
-              </tr>
+              </ClickableRow>
             ))}
             {calls.length === 0 && (
               <tr>

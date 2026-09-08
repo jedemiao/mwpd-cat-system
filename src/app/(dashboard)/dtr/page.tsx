@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
+import { ClickableRow } from "@/components/ClickableRow";
 import {
   defaultPeriodMonth,
   formatMonthLabel,
@@ -132,7 +133,7 @@ export default async function DtrPage(props: { searchParams: Promise<SearchParam
           </thead>
           <tbody>
             {rows.map(({ person, record }) => (
-              <tr key={person.id} className={record ? undefined : "bg-surface/60 dark:bg-white/[0.02]"}>
+              <ClickableRow key={person.id} href={record ? `/dtr/${record.id}` : `/dtr/new?month=${monthParam}&personnelId=${person.id}`} className={record ? undefined : "bg-surface/60 dark:bg-white/[0.02]"}>
                 <td className="whitespace-nowrap font-medium text-ink-900 dark:text-white">{person.name}</td>
                 <td className="whitespace-nowrap">{record?.dateFiled?.toLocaleDateString() ?? "—"}</td>
                 <td className="whitespace-nowrap">{record?.dateSubmittedToHr?.toLocaleDateString() ?? "—"}</td>
@@ -159,7 +160,7 @@ export default async function DtrPage(props: { searchParams: Promise<SearchParam
                     </Link>
                   )}
                 </td>
-              </tr>
+              </ClickableRow>
             ))}
             {rows.length === 0 && (
               <tr>

@@ -16,6 +16,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -225,7 +226,7 @@ export default async function RegulationLicensingPage(props: {
             {rows.map((row) => {
               const given = new Set(row.services);
               return (
-                <tr key={row.id}>
+                <ClickableRow key={row.id} href={`/regulation-licensing/${row.id}`}>
                   <td className="whitespace-nowrap">
                     {row.serviceDate.toLocaleDateString("en-US", { timeZone: "UTC" })}
                   </td>
@@ -265,7 +266,7 @@ export default async function RegulationLicensingPage(props: {
                       Edit
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               );
             })}
           </tbody>

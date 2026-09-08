@@ -7,6 +7,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 import {
   currentSemester,
   formatBudget,
@@ -173,7 +174,7 @@ export default async function DipcrPage(props: { searchParams: Promise<SearchPar
                   if (showSection) sectionCellDone = true;
 
                   return (
-                    <tr key={ind.id}>
+                    <ClickableRow key={ind.id} href={`/dipcr/${ind.id}`}>
                       {/* The PAP name is written once per group and spans its
                           rows, which is what column A does on the sheet. The
                           section heading rides above it in the same cell. */}
@@ -210,7 +211,7 @@ export default async function DipcrPage(props: { searchParams: Promise<SearchPar
                           Edit
                         </Link>
                       </td>
-                    </tr>
+                    </ClickableRow>
                   );
                 }),
               );

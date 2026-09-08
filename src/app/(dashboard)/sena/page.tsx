@@ -19,6 +19,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -178,7 +179,7 @@ export default async function SenaPage(props: { searchParams: Promise<SearchPara
           </thead>
           <tbody>
             {conferences.map((c) => (
-              <tr key={c.id}>
+              <ClickableRow key={c.id} href={`/sena/${c.id}`}>
                 <td className="whitespace-nowrap font-mono text-xs">
                   {c.conferenceDate.toLocaleDateString("en-PH", {
                     day: "2-digit",
@@ -222,7 +223,7 @@ export default async function SenaPage(props: { searchParams: Promise<SearchPara
                     Edit
                   </Link>
                 </td>
-              </tr>
+              </ClickableRow>
             ))}
             {conferences.length === 0 && (
               <tr>

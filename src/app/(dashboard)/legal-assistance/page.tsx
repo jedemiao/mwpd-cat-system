@@ -18,6 +18,7 @@ import { PrintLink, listHref } from "@/components/PrintLink";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { PrintHeader } from "@/components/PrintHeader";
 import { PlusIcon, SearchIcon } from "@/components/icons";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -226,7 +227,7 @@ export default async function LegalAssistancePage(props: { searchParams: Promise
             {rows.map((row) => {
               const given = new Set(row.forms);
               return (
-                <tr key={row.id}>
+                <ClickableRow key={row.id} href={`/legal-assistance/${row.id}`}>
                   <td className="whitespace-nowrap">
                     {row.assistanceDate.toLocaleDateString("en-US", { timeZone: "UTC" })}
                   </td>
@@ -287,7 +288,7 @@ export default async function LegalAssistancePage(props: { searchParams: Promise
                       Edit
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               );
             })}
           </tbody>

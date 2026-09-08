@@ -18,6 +18,7 @@ import {
   type ActivityCategoryValue,
 } from "@/lib/activityCategories";
 import { leaveTypeLabel } from "@/lib/leaveTypes";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const PAGE_SIZE = 20;
 const PRINT_MAX = 2000;
@@ -287,7 +288,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                   ].filter((f): f is { label: string; key: string } => Boolean(f));
 
                   return (
-                    <tr key={activity.id}>
+                    <ClickableRow key={activity.id} href={`/activities/${activity.id}`}>
                       <td className="whitespace-nowrap">
                         {activity.date.toLocaleDateString()}
                         {activity.endDate && ` – ${activity.endDate.toLocaleDateString()}`}
@@ -335,7 +336,7 @@ export default async function ActivitiesPage(props: { searchParams: Promise<Sear
                           Edit
                         </Link>
                       </td>
-                    </tr>
+                    </ClickableRow>
                   );
                 })}
               </tbody>
