@@ -19,6 +19,10 @@
 
 # TLS key material for the reverse proxy
 certs/*.pem
+# The CA’s serial counter — regenerated on every issuance, so it is server
+# state rather than source, and two machines would conflict on it.
+certs/*.srl
+certs/backup/
 certs/*.key
 certs/*.crt
 

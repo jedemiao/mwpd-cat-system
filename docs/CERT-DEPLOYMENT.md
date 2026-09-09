@@ -5,7 +5,7 @@ connection is encrypted, but browsers show **"Not secure"** until each computer 
 told to *trust* the certificate. This guide covers deploying that trust to many
 machines at once.
 
-- **Certificate file:** `mwpd-cert.crt` (the DMW server certificate)
+- **Certificate file:** `mwpd-ca.crt` (the DMW server certificate)
 - **For a single PC** instead, see [STAFF-PC-SETUP.md](STAFF-PC-SETUP.md).
 
 ---
@@ -23,7 +23,7 @@ systeminfo | findstr /C:"Domain"
 - **WORKGROUP** → no domain; use **Option 2** instead.
 
 ### Step 1 — Put the cert on the Domain Controller
-Copy **`mwpd-cert.crt`** to the Domain Controller (or an admin PC with the Group
+Copy **`mwpd-ca.crt`** to the Domain Controller (or an admin PC with the Group
 Policy tools).
 
 ### Step 2 — Open Group Policy Management
@@ -44,7 +44,7 @@ Public Key Policies → Trusted Root Certification Authorities**
 
 ### Step 5 — Import the certificate
 - Right-click **Trusted Root Certification Authorities** → **Import…**
-- Wizard → **Next** → **Browse** to `mwpd-cert.crt` → **Next**
+- Wizard → **Next** → **Browse** to `mwpd-ca.crt` → **Next**
 - Confirm the store is **"Trusted Root Certification Authorities"** → **Next** →
   **Finish** → **OK**.
 
@@ -63,7 +63,7 @@ Verify the cert landed:
 ```powershell
 Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*MWPD*" }
 ```
-Then open `https://192.168.100.77/login` in a **freshly restarted** browser → padlock.
+Then open `https://192.168.100.109/login` in a **freshly restarted** browser → padlock.
 
 Once verified, every domain-joined computer gets it automatically — no per-PC visits.
 
@@ -71,11 +71,11 @@ Once verified, every domain-joined computer gets it automatically — no per-PC 
 
 ## Option 2 — No domain (WORKGROUP): one-line install per PC
 
-No central push, but you can skip the click-through wizard. Put `mwpd-cert.crt` in a
+No central push, but you can skip the click-through wizard. Put `mwpd-ca.crt` in a
 shared folder or on a USB stick, then on each PC run **PowerShell as Administrator**:
 
 ```powershell
-Import-Certificate -FilePath "\\path\to\mwpd-cert.crt" -CertStoreLocation Cert:\LocalMachine\Root
+Import-Certificate -FilePath "\\path\to\mwpd-ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
 ```
 
 Then **restart the browser** on that PC. You can also save the line as a `.ps1`/`.bat`
@@ -88,9 +88,9 @@ and run it from the USB stick on each machine.
 ```powershell
 Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*MWPD*" } | Select-Object Subject, Thumbprint, NotAfter
 ```
-Expected thumbprint: `266F232AA6EF7A35E2FE4F0E884EDCF00DA2E898` (valid to 2028-10-26).
+Expected thumbprint: `E7EF1245C91A43A713B54E79D76C5499ABECF2A4` (CA, valid to 2036-09-05).
 
-Then browse to `https://192.168.100.77/login` in a **freshly restarted** browser.
+Then browse to `https://192.168.100.109/login` in a **freshly restarted** browser.
 
 ---
 

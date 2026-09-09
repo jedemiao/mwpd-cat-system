@@ -3,44 +3,85 @@
 A one-time setup so a staff computer can securely open the MWPtD Tracker
 (clears the browser's red **"Not secure"** warning) and sign in.
 
-- **Server address:** `https://192.168.100.77/login`
-- **You'll need:** the file `mwpd-cert.crt`, and your username/password (from the Division Chief)
+- **Server address:** `https://192.168.100.109/login`
+  (or `https://tracker.dmw.internal/login` once the router's DNS entry is added)
+- **You'll need:** the file `mwpd-ca.crt`, and your username/password (from the Division Chief)
 
-> For deploying the certificate to many PCs at once on a Windows domain, see
+> For deploying to many PCs at once on a Windows domain, see
 > [CERT-DEPLOYMENT.md](CERT-DEPLOYMENT.md) instead of doing Part A on each PC.
 
 ---
 
-## Part A — Trust the security certificate *(once per PC, needs admin rights)*
+## Part A — Trust the certificate authority *(once per PC, needs admin rights)*
 
 This is what removes the red **"Not secure"** warning.
 
-**1. Get the certificate file onto the PC**
-Copy **`mwpd-cert.crt`** to the computer (USB drive or shared folder). Put it on the Desktop.
+You are installing **`mwpd-ca.crt`** — the office's own certificate authority, not
+the server's own certificate. That distinction matters: once a PC trusts the
+authority, it accepts any server certificate the authority issues. So this is done
+**once per computer, ever**. When the server certificate is replaced — because it
+expired, or the server's address changed — nothing on these PCs needs touching
+again.
 
-**2. Open the certificate**
-Double-click **`mwpd-cert.crt`** → a "Certificate" window opens → click **Install Certificate…**
+`mwpd-ca.crt` contains no private key. It is safe to email, put on a USB stick, or
+leave in a shared folder.
 
-**3. Choose where to install it**
-- Store Location: select **Local Machine** → **Next**
-- Click **Yes** on the admin (UAC) prompt.
+### The reliable way — PowerShell
 
-**4. Pick the trust store**
+**1. Copy `mwpd-ca.crt` onto the PC** (USB drive or shared folder).
+
+**2. Open PowerShell as Administrator**
+Right-click **Start** → **Terminal (Admin)** or **Windows PowerShell (Admin)** →
+**Yes** on the prompt.
+
+**3. Run this**, with the path adjusted to where you put the file:
+
+```powershell
+Import-Certificate -FilePath "C:\Users\Public\mwpd-ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+It should print a line ending `CN=MWPD Caraga Internal CA`.
+
+**4. Fully restart the browser** — see step 5 below.
+
+### The click-through way — double-click wizard
+
+Use this if you would rather not type a command. **Step 3 is where this goes
+wrong**, so read it carefully.
+
+**1. Double-click `mwpd-ca.crt`** → a Certificate window opens → **Install Certificate…**
+
+**2. Store Location:** select **Local Machine** → **Next** → **Yes** on the admin prompt.
+
+**3. Pick the store — do not accept the default.**
+The wizard offers "Automatically select the certificate store based on the type of
+certificate". That files it somewhere the browser does not look, and the warning
+stays. Instead:
 - Select **"Place all certificates in the following store"** → **Browse…**
 - Choose **"Trusted Root Certification Authorities"** → **OK** → **Next** → **Finish**
-- A security warning appears → **Yes**
-- You should see **"The import was successful."** → **OK**
+
+**4. A security warning appears.** Check the thumbprint matches, then **Yes**:
+
+```
+E7EF1245C91A43A713B54E79D76C5499ABECF2A4
+```
+
+You should see **"The import was successful."** → **OK**
 
 **5. Fully restart the browser** *(essential — a refresh is not enough)*
-- Close **all** browser windows, then reopen.
-- The browser only re-reads the trusted-certificate store when it starts, so an open tab keeps showing the old warning until you restart.
+Close **all** browser windows and check the system tray for a background instance,
+then reopen. Browsers only re-read the trusted-certificate store on startup, so an
+open tab keeps showing the old warning. In Chrome, typing **`chrome://restart`**
+forces a complete relaunch.
 
 ---
 
 ## Part B — Access the app
 
 **6. Open the site**
-Go to **`https://192.168.100.77/login`** — you should now see a **padlock** (no warning).
+Go to **`https://192.168.100.109/login`** — you should now see a **padlock**, no
+warning. Clicking the padlock should show the certificate was issued by
+**MWPD Caraga Internal CA**.
 
 **7. Bookmark it** so staff don't have to type the address.
 
@@ -56,7 +97,19 @@ To open it like a normal app (its own window + taskbar icon) instead of a browse
 tab, use the packaged **MWPtD Tracker** app: copy the app folder to the PC and make
 a shortcut to `MWPtD Tracker.exe`.
 
-> The desktop app only works if the certificate in **Part A** is installed on that PC.
+> The desktop app only works if Part A is done on that PC.
+
+---
+
+## Check it worked
+
+In PowerShell:
+
+```powershell
+Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*MWPD Caraga*' }
+```
+
+It should list thumbprint `E7EF1245C91A43A713B54E79D76C5499ABECF2A4`.
 
 ---
 
@@ -64,15 +117,22 @@ a shortcut to `MWPtD Tracker.exe`.
 
 | Symptom | Fix |
 |---|---|
-| Still "Not secure" after reopening | The browser kept background processes. In PowerShell: `taskkill /IM chrome.exe /F` then reopen. |
-| "This page can't be reached" | The PC isn't on the same network as the server, or the server IP changed. Confirm the server is reachable at `192.168.100.77`. |
-| Desktop app opens blank | The certificate (Part A) isn't installed on that PC — do Part A first. |
+| Still "Not secure" after reopening | The browser kept background processes. In PowerShell: `taskkill /IM chrome.exe /F`, then reopen. Or type `chrome://restart`. |
+| `NET::ERR_CERT_AUTHORITY_INVALID` | The CA is not in **Trusted Root Certification Authorities** — almost always the wizard's default store in Part A step 3. Check with the command above; if nothing lists, install it again. |
+| "This page can't be reached" by IP | The PC isn't on the same network as the server, or the server's address changed. |
+| "This page can't be reached" by name | `tracker.dmw.internal` has no DNS entry yet. Use the IP, or add the entry on the router. |
+| Firefox still warns | Firefox ignores the Windows certificate store. Import `mwpd-ca.crt` under **Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import**, and tick "Trust this CA to identify websites". |
 
 ---
 
 ## Notes
 
-- The certificate is valid for the addresses `192.168.100.77`, `192.168.0.199`, and
-  `mwpd.local`. If the server ever moves to a **new** IP not in that list, the
-  certificate must be regenerated and re-installed.
-- Keep **`mwpd-cert.crt`** in a shared folder / USB so it's easy to reuse on new PCs.
+- The **CA** expires in 2036. The **server certificate** expires December 2028 and
+  is replaced on the server alone — staff PCs are unaffected.
+- The server certificate currently covers `tracker.dmw.internal`, `dmw.internal`,
+  `mwpd.dmw.internal`, `mwpd.local`, and the addresses `192.168.100.109`,
+  `192.168.100.77`, `192.168.0.199`. An address outside that list needs the
+  certificate reissued **on the server** — still nothing to do on staff PCs.
+- Keep **`mwpd-ca.crt`** in a shared folder or USB so it's easy to reuse on new PCs.
+- The CA's private key (`certs/ca-key.pem` on the server) must **never** be copied
+  anywhere. It is what issues certificates in the office's name.

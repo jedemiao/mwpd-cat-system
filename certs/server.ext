@@ -1,0 +1,20 @@
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt
+[alt]
+# Names. ".internal" is ICANN-reserved for private networks, so none of these
+# can ever collide with a real domain the machine might resolve on the internet.
+DNS.1 = dmw.internal
+DNS.2 = tracker.dmw.internal
+DNS.3 = mwpd.dmw.internal
+# Kept from the previous certificate so nothing already in use breaks.
+DNS.4 = mwpd.local
+DNS.5 = DMW-DICT-XIII
+DNS.6 = localhost
+# Addresses. The current one, the previous one, and the DICT subnet this
+# machine has landed on before.
+IP.1  = 192.168.100.109
+IP.2  = 192.168.100.77
+IP.3  = 192.168.0.199
+IP.4  = 127.0.0.1
