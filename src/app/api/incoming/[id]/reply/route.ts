@@ -19,6 +19,18 @@ import { buildReplyRoutingNumber } from "@/lib/documentTypeCodes";
 // office, and only one reply is started at a time. Folding that into the
 // general create route would have meant a create route that sometimes claims a
 // sequence number and sometimes doesn't, decided by a field the client sent.
+// Prefixed so a draft is recognisable on the work board before anybody has
+// retitled it. Detected as well as added: a document that arrived here as
+// another division's reply is already titled "Reply — …", and replying to it
+// would otherwise stack a second prefix on every hop between offices.
+const REPLY_PREFIX = "Reply — ";
+
+function replyTitle(incomingTitle: string): string {
+  return incomingTitle.startsWith(REPLY_PREFIX)
+    ? incomingTitle
+    : `${REPLY_PREFIX}${incomingTitle}`;
+}
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getActiveSession();
@@ -59,7 +71,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         status: "DRAFT",
         documentType: incoming.documentType,
         documentTypeOther: incoming.documentTypeOther,
-        documentTitle: `Reply — ${incoming.documentTitle}`,
+        documentTitle: replyTitle(incoming.documentTitle),
       },
     });
   } catch (e) {
