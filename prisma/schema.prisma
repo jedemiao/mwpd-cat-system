@@ -788,6 +788,12 @@ model AuditLog {
   ipAddress  String?
   details    Json?
   createdAt  DateTime @default(now())
+
+  // The office log reads this table newest-first, always scoped to one office
+  // (src/lib/officeLog.ts). Until that page there was no reader at all, so it
+  // carried no index beyond its key — and it is the one table here that only
+  // ever grows, since nothing prunes it.
+  @@index([officeId, createdAt])
 }
 
 // How a SENA conference ended. The sheet records SETTLED, FOR 2ND CON and

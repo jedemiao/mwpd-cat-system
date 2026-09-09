@@ -43,7 +43,7 @@ export type DressDay = "mon" | "tue" | "wed" | "thu" | "fri" | "off";
 // The office keeps Philippine time; the container may not. Asking the server
 // for its own weekday would roll the colour over at the wrong hour whenever the
 // host runs UTC — 8am in Butuan is still the previous day there.
-const OFFICE_TZ = "Asia/Manila";
+export const OFFICE_TZ = "Asia/Manila";
 
 const WEEKDAY_TO_DRESS: Record<string, DressDay> = {
   Mon: "mon",

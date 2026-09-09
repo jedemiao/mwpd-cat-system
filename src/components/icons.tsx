@@ -185,6 +185,18 @@ export function ArchiveIcon(props: IconProps) {
 }
 
 // DTR filing — a clock, for the daily time record.
+// A clock wound backwards — the office log reads the day that already happened,
+// not the one being counted down like the DTR's ClockIcon beside it.
+export function HistoryIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3.5 8.5V4m0 4.5H8" />
+      <path d="M3.9 8.5A8.5 8.5 0 1 1 3.5 13" />
+      <path d="M12 7.5V12l3 1.75" />
+    </svg>
+  );
+}
+
 export function ClockIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

@@ -17,6 +17,7 @@ import {
   FileIcon,
   ScaleIcon,
   PhoneIcon,
+  HistoryIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "./icons";
@@ -156,6 +157,10 @@ export function Sidebar({
       ? [{ href: "/call-log", label: "Call log", icon: <PhoneIcon className="h-[18px] w-[18px]" /> }]
       : []),
     { href: "/forms", label: "Forms", icon: <FolderIcon className="h-[18px] w-[18px]" /> },
+    // Below Forms, at the foot of the nav: the office log is about the
+    // registers rather than one of them, and every division has it — it reads
+    // AuditLog, which every office writes to, so there is no flag to gate.
+    { href: "/office-log", label: "Office log", icon: <HistoryIcon className="h-[18px] w-[18px]" /> },
   ];
 
   return (
