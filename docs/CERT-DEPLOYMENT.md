@@ -1,11 +1,17 @@
-# Deploy the MWPD certificate to all PCs
+# Deploy the MWPD certificate authority to all PCs
 
-The MWPtD Tracker is served over HTTPS with a **self-signed certificate**. The
-connection is encrypted, but browsers show **"Not secure"** until each computer is
-told to *trust* the certificate. This guide covers deploying that trust to many
-machines at once.
+The MWPtD Tracker is served over HTTPS with a certificate issued by the office's
+own **certificate authority**. The connection is encrypted, but browsers show
+**"Not secure"** until each computer is told to trust that authority. This guide
+covers deploying that trust to many machines at once.
 
-- **Certificate file:** `mwpd-ca.crt` (the DMW server certificate)
+- **File to deploy:** `mwpd-ca.crt` — the authority, **not** the server's own
+  certificate. That distinction is the whole point: once a PC trusts the
+  authority it accepts every certificate the authority issues, so this is done
+  once per machine, ever. Replacing the server certificate — on expiry, or
+  because the server's address changed — needs nothing on these PCs.
+- `mwpd-ca.crt` carries no private key, so it is safe to email, put on a USB
+  stick, or leave in a shared folder.
 - **For a single PC** instead, see [STAFF-PC-SETUP.md](STAFF-PC-SETUP.md).
 
 ---
@@ -63,7 +69,7 @@ Verify the cert landed:
 ```powershell
 Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*MWPD*" }
 ```
-Then open `https://192.168.100.109/login` in a **freshly restarted** browser → padlock.
+Then open `https://tracker.dmw.internal/login` in a **freshly restarted** browser → padlock.
 
 Once verified, every domain-joined computer gets it automatically — no per-PC visits.
 
@@ -88,9 +94,28 @@ and run it from the USB stick on each machine.
 ```powershell
 Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*MWPD*" } | Select-Object Subject, Thumbprint, NotAfter
 ```
-Expected thumbprint: `E7EF1245C91A43A713B54E79D76C5499ABECF2A4` (CA, valid to 2036-09-05).
 
-Then browse to `https://192.168.100.109/login` in a **freshly restarted** browser.
+Expected: **one** entry — `CN=MWPD Caraga Internal CA`, thumbprint
+`E7EF1245C91A43A713B54E79D76C5499ABECF2A4`, valid to 2036-09-05.
+
+### If a second entry appears
+
+`CN=192.168.100.77, O=MWPD` (thumbprint `266F232AA6EF7A35E2FE4F0E884EDCF00DA2E898`)
+is the old self-signed certificate from before the authority existed. Any PC set
+up before 2026-09-08 still has it. It is not needed and should be removed: it
+names an address the server has left, nginx no longer serves it, and it sits in
+Trusted Root as a bare certificate rather than an authority.
+
+In an **admin** PowerShell — it was usually installed in both stores:
+
+```powershell
+Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root |
+  Where-Object { $_.Thumbprint -eq '266F232AA6EF7A35E2FE4F0E884EDCF00DA2E898' } |
+  Remove-Item
+```
+
+Then browse to `https://tracker.dmw.internal/login` in a **freshly restarted**
+browser.
 
 ---
 
@@ -101,8 +126,13 @@ Then browse to `https://192.168.100.109/login` in a **freshly restarted** browse
   `taskkill /IM chrome.exe /F`, then reopen.
 - Installing to **Local Machine → Trusted Root** covers **all users on that PC**, but
   **not** other PCs — each machine needs it (hence Option 1 for domains).
-- The certificate is valid for `192.168.100.77`, `192.168.0.199`, and `mwpd.local`.
-  If the server moves to a **new IP not in that list**, regenerate the certificate
-  (with the new address in its Subject Alternative Name) and re-deploy.
+- The **server** certificate covers `tracker.dmw.internal`, `dmw.internal`,
+  `mwpd.dmw.internal`, `mwpd.local`, `localhost`, and the addresses
+  `192.168.100.109`, `192.168.100.77`, `192.168.0.199`, `127.0.0.1`. An address
+  outside that list needs the certificate reissued **on the server** — and still
+  nothing redeployed here, because these PCs trust the authority that signs it.
+  See [SERVER-ADDRESS-CHANGE.md](SERVER-ADDRESS-CHANGE.md).
+- The **authority** expires 2036-09-05. The **server** certificate expires
+  December 2028 and is replaced on the server alone.
 - Once a PC trusts the certificate, the packaged **MWPtD Tracker** desktop app also
   works without the `--ignore-certificate-errors` flag.

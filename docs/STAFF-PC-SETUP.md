@@ -106,10 +106,29 @@ a shortcut to `MWPtD Tracker.exe`.
 In PowerShell:
 
 ```powershell
-Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*MWPD Caraga*' }
+Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*MWPD*' }
 ```
 
-It should list thumbprint `E7EF1245C91A43A713B54E79D76C5499ABECF2A4`.
+It should list **one** entry — `CN=MWPD Caraga Internal CA`, thumbprint
+`E7EF1245C91A43A713B54E79D76C5499ABECF2A4`.
+
+### Remove the old certificate, if this PC has one
+
+A PC set up before 2026-09-08 also carries `CN=192.168.100.77, O=MWPD`
+(thumbprint `266F232AA6EF7A35E2FE4F0E884EDCF00DA2E898`) — the self-signed
+certificate used before the office had its own authority. Nothing needs it now:
+the server has left that address, nginx no longer serves it, and it sits in
+Trusted Root as a bare certificate rather than an authority. It was usually
+installed in both stores, so clear both, in an **admin** PowerShell:
+
+```powershell
+Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root |
+  Where-Object { $_.Thumbprint -eq '266F232AA6EF7A35E2FE4F0E884EDCF00DA2E898' } |
+  Remove-Item
+```
+
+Removing it changes nothing about access — the app is reached through the
+authority above.
 
 ---
 
